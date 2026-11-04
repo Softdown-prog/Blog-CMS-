@@ -18,15 +18,30 @@
             "polyfills": [],
             "tsConfig": "tsconfig.app.json",
             "assets": [],
-            "styles": ["src/styles.css"],
+            "styles": [
+              "src/styles.css"
+            ],
             "scripts": [],
             "outputHashing": "none"
           },
           "configurations": {
             "production": {
-              "optimization": true,
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": {
+                  "inline": false
+                }
+              },
               "budgets": [
-                { "type": "initial", "maximumWarning": "500kB", "maximumError": "1MB" }
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                }
               ]
             },
             "development": {
@@ -40,14 +55,19 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "configurations": {
-            "production": { "buildTarget": "blog-web:build:production" },
-            "development": { "buildTarget": "blog-web:build:development" }
+            "production": {
+              "buildTarget": "blog-web:build:production"
+            },
+            "development": {
+              "buildTarget": "blog-web:build:development"
+            }
           },
           "defaultConfiguration": "development"
         }
       }
     }
   },
-  "cli": { "analytics": false }
+  "cli": {
+    "analytics": false
+  }
 }
-
