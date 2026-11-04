@@ -34,3 +34,17 @@ A migration inicial ainda nao possui coluna revision e nao foi aplicada. Antes d
 
 Executar npm test --prefix apps/api para validar os casos de uso, regras de politica e leitura publica simulada.
 A CI continua usando SAC do Data_libray para preflight, compilacao Angular AOT e postflight; nenhum desses testes autoriza implantacao na VPS.
+
+## Listagem administrativa (contrato interno sem endpoints)
+
+Novo caso `ListAdminPosts` com porta `AdminPostReader` em `apps/api/src/editorial/application/admin-list.ts`.
+Editor/admin podem filtrar todos os estados; autor visualiza somente seus próprios rascunhos.
+Filtro de autor é derivado do ator autenticado e aplicado na consulta de persistência; o caso de uso ainda verifica o escopo do retorno, falhando fechado diante de um adaptador incorreto.
+
+Paginação keyset `createdAt DESC, id DESC` com 1–50 itens, padrão 20 e busca `limit+1` para detectar próxima página.
+O cursor v1 usa base64url e vincula ID do ator, estado filtrado e último registro. **Não é token de autenticação nem assinatura**; pode ser alterado e nunca deve conceder acesso.
+A porta deve aplicar filtros/paginação antes do limite, nunca retornar corpo do artigo e emitir somente os metadados tipados.
+Resultados fora de ordem, com campos extras, fora do escopo ou acima do limite são bloqueados.
+
+Antes de implementar o adaptador PostgreSQL: definir índices `(created_at DESC, id DESC)` e índices para autor/status, testar timestamp e UUID canônicos, alinhar migração de revision e executar testes reais em banco descartável.
+Não foram criadas rotas HTTP, sessões, agendadores, integração com a VPS nem deploy.

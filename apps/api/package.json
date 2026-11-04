@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "start:prod": "node dist/main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node --test dist/posts.service.spec.js dist/editorial/document.spec.js dist/editorial/policy.spec.js dist/editorial/application/commands.spec.js"
+    "test": "npm run build && node --test dist/posts.service.spec.js dist/editorial/document.spec.js dist/editorial/policy.spec.js dist/editorial/application/commands.spec.js dist/editorial/application/admin-list.spec.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",
