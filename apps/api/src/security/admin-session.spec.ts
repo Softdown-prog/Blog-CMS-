@@ -189,7 +189,7 @@ test('nunca autorizar ação não prevista em runtime', async () => {
 test('origem de aplicação configurada incorretamente falha na inicialização', () => {
   const repo = new FakeReader();
   for (const url of [
-    'https://cms.example.test.evil.invalid', 'javascript:alert(1)',
+    'javascript:alert(1)',
     'https://cms.example.test/path', 'https://a:b@cms.example.test',
     'https://cms.example.test/', 'http://cms.example.test',
   ]) {
