@@ -34,7 +34,7 @@ export interface SecurityAuditWriter {
   append(event: SecurityAuditEvent): Promise<void>;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY = /^[0-9a-f]{64}$/;
 const USER_EVENTS: readonly SecurityEventType[] = [
   'login-approved', 'password-reset-completed',
