@@ -1,0 +1,27 @@
+{
+  "name": "blog-cms-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "ts-node src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start:prod": "node dist/main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-express": "^11.1.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~6.0.2"
+  },
+  "engines": {
+    "node": ">=24.15.0 <25"
+  }
+}
+
