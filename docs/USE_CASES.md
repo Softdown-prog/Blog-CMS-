@@ -52,3 +52,7 @@ Não foram criadas rotas HTTP, sessões, agendadores, integração com a VPS nem
 ## Agendamento e histórico
 
 Novos contratos em application/commands.ts (scheduleDraft, cancelSchedule) e application/revisions.ts (ListEditorialRevisions). Sem conexão a serviços. Ver [EDITORIAL_SCHEDULING_REVISIONS.md](EDITORIAL_SCHEDULING_REVISIONS.md).
+
+## Recuperação de versões antigas
+
+Novo caso interno RestoreHistoricalDraft com validação rigorosa de snapshot e persistência futura por CAS; não reescreve o histórico e não altera artigos publicados/agendados. Ver RESTORE_REVISIONS.md. Integrações, serviços reais, rotas e deploy continuam fora de escopo.

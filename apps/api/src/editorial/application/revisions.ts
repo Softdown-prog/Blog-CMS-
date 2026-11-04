@@ -80,6 +80,26 @@ function isSnapshot(value: unknown, current: EditorialPost, revision: number): v
   }
 }
 
+
+/**
+ * Valida registro obtido de um repositório externo antes de usá-lo.
+ * Um tipo TypeScript não é proteção de runtime contra JSON corrompido.
+ */
+export function isVerifiedEditorialRevision(
+  value: unknown,
+  current: EditorialPost,
+  expectedRevision: number,
+): value is EditorialRevision {
+  if (!hasExactKeys(value, REVISION_KEYS)
+    || value['postId'] !== current.id
+    || value['revision'] !== expectedRevision
+    || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0
+    || expectedRevision > current.revision
+    || !isRevisionOrigin(value['origin'])
+    || !utcIso(value['recordedAt'])) return false;
+  return isSnapshot(value['snapshot'], current, expectedRevision);
+}
+
 function validRecords(
   rows: readonly EditorialRevision[],
   current: EditorialPost,
