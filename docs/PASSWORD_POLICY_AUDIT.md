@@ -39,3 +39,7 @@ Registro novo é criado por whitelist, sem repassar objetos externos. Erro no ar
 ## Sequência
 Arquitetura e testes internos -> UI e segurança de domínio -> browser e fuzz -> integrações somente no fim -> homologação -> deploy.
 CI SAC e compilação verde NÃO autorizam produção.
+
+## Audit outbox (contratos ainda offline)
+
+O contrato `CommitAuditedSessionMutation` exige persistir alteração de sessão e evento na MESMA transação; `ProjectSecurityAuditOutbox` define leases e ACK transacional no ledger interno. Veja [AUDIT_OUTBOX_ARCHITECTURE.md](AUDIT_OUTBOX_ARCHITECTURE.md). Não há worker ou banco conectados.

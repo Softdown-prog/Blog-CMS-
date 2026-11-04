@@ -64,3 +64,7 @@ continua na CI, sem autorizar deploy.
 ## Autenticação prévia ao issue
 
 O contrato `VerifyPasswordLogin` agora pode produzir uma prova interna `VerifiedLogin` quando um `PasswordVerifier` confiável aceitar uma senha e o limitador conceder uma tentativa. **Esta prova não deve ser exposta como DTO HTTP**. Ver [CREDENTIALS_RECOVERY.md](CREDENTIALS_RECOVERY.md). A integração real com Argon2id, limitação compartilhada e recuperação está pendente.
+
+## Auditoria atômica a integrar por último
+
+As portas `AtomicSecurityMutationPort` e `AuditOutboxProjectionPort` estão definidas, porém `SessionLifecycle` ainda não está conectado a elas. Antes de ativar logout/revogação em produção, exigir persistência atômica de estado, evento e idempotência. Ver [AUDIT_OUTBOX_ARCHITECTURE.md](AUDIT_OUTBOX_ARCHITECTURE.md).

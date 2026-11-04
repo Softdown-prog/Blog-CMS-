@@ -20,3 +20,7 @@ Casos de uso puros e portas para senha Argon2id, reserva atômica de tentativas 
 ## Política de senha e auditoria tipada
 
 Ver [PASSWORD_POLICY_AUDIT.md](PASSWORD_POLICY_AUDIT.md). São contratos isolados, sem banco, logs reais, endpoints ou integrações.
+
+## Auditoria transacional pendente de integração
+
+Os contratos de idempotência, outbox e projeção do ledger foram preparados em [AUDIT_OUTBOX_ARCHITECTURE.md](AUDIT_OUTBOX_ARCHITECTURE.md). Não substituir revisão de isolamento transacional em PostgreSQL por testes simulados.
