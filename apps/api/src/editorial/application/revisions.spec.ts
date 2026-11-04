@@ -126,7 +126,7 @@ test('registro de revisão fora do artigo, fora de ordem ou repetido falha fecha
 });
 
 test('snapshot com token extra ou documento malformado nunca é devolvido', async () => {
-  const badRecords = [
+  const badRecords: readonly unknown[] = [
     { ...record(3), sessionToken: 'SECRET' },
     { ...record(3), snapshot: { ...record(3).snapshot, passwordHash: 'SECRET' } },
     { ...record(3), snapshot: { ...record(3).snapshot, body: { schemaVersion: 1, blocks: [{ type: 'iframe' }] } } },
@@ -134,8 +134,9 @@ test('snapshot com token extra ou documento malformado nunca é devolvido', asyn
     { ...record(3), origin: { kind: 'system', service: 'unknown' } },
     { ...record(3), origin: { kind: 'user', userId: 'fake-user', token: 'SECRET' } },
   ];
+  // A entrada inválida só é forçada no adaptador simulado; nunca em produção.
   for (const item of badRecords) {
-    const result = await reader(post, new FakeRevisions([item])).execute(editor, { postId: POST_ID });
+    const result = await reader(post, new FakeRevisions([item as EditorialRevision])).execute(editor, { postId: POST_ID });
     assert.deepEqual(result, { ok: false, error: 'repository-contract-violation' });
   }
 });
