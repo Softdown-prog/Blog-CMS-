@@ -33,7 +33,7 @@ A migração 001 não dispõe de revision no post nem snapshot completo na tabel
 2. Criar snapshot da revisão 0 junto do insert inicial, na mesma transação.
 3. Em compareAndSave, gravar o snapshot da nova revisão e o post no **mesmo commit transacional**, com CAS pela revisão esperada.
 4. Rejeitar duplicação de slug e revisar constraints de status/data.
-5. Definir eventual dispatcher de publicações vencidas com idempotência, controle de concorrência, relógio confiável e telemetria. Nenhum scheduler foi criado nesta etapa.
+5. O dispatcher offline de publicações vencidas foi definido em `application/scheduled-dispatcher.ts`, porém **não existe scheduler ativo nem adaptador SQL**; falta garantir CAS em banco, telemetria e identidade de auditoria. Ver [PERSISTENCE_AND_SCHEDULER.md](PERSISTENCE_AND_SCHEDULER.md).
 
 ## Segurança e testes
 Ator deve ser derivado de sessão autenticada no backend. Estes contratos não autentificam por conta própria e não podem ser expostos em controller antes de RBAC, CSRF e rate limit. Regras do domínio não substituem a autorização HTTP.
