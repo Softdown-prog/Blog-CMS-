@@ -48,3 +48,7 @@ Resultados fora de ordem, com campos extras, fora do escopo ou acima do limite s
 
 Antes de implementar o adaptador PostgreSQL: definir índices `(created_at DESC, id DESC)` e índices para autor/status, testar timestamp e UUID canônicos, alinhar migração de revision e executar testes reais em banco descartável.
 Não foram criadas rotas HTTP, sessões, agendadores, integração com a VPS nem deploy.
+
+## Agendamento e histórico
+
+Novos contratos em application/commands.ts (scheduleDraft, cancelSchedule) e application/revisions.ts (ListEditorialRevisions). Sem conexão a serviços. Ver [EDITORIAL_SCHEDULING_REVISIONS.md](EDITORIAL_SCHEDULING_REVISIONS.md).

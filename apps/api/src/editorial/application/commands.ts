@@ -30,6 +30,10 @@ export interface PublishDraftInput {
   readonly expectedRevision: number;
 }
 
+export interface ScheduleDraftInput extends PublishDraftInput {
+  readonly scheduledAt: string;
+}
+
 interface ValidatedFields {
   readonly title: string;
   readonly slug: string;
@@ -161,5 +165,62 @@ export class EditorialCommands {
     return outcome === 'updated' ? accept(next)
       : reject(outcome === 'duplicate-slug' ? 'duplicate-slug' : 'stale-revision');
   }
-}
 
+  /**
+   * Enfileira a intenção editorial: scheduled NÃO torna um post público.
+   * Um publicador futuro, separado, terá de revalidar a data e fazer a
+   * transição transacional para published. Sem timers ou jobs nesta fase.
+   */
+  async scheduleDraft(
+    actor: EditorialActor, input: ScheduleDraftInput,
+  ): Promise<UseCaseResult<EditorialPost>> {
+    if (!knownRole(actor.role) || !validId(actor.id)) return reject('forbidden');
+    if (!validId(input.postId) || !revisionValid(input.expectedRevision)) return reject('invalid-input');
+    const current = await this.repo.findById(input.postId);
+    if (!current) return reject('not-found');
+    if (current.status !== 'draft' && current.status !== 'scheduled') return reject('invalid-transition');
+
+    const decision = decideEditorialTransition(
+      actor, current, {
+        operation: 'schedule',
+        expectedRevision: input.expectedRevision,
+        scheduledAt: input.scheduledAt,
+      },
+      this.clock.nowIso(),
+    );
+    if (!decision.ok) return reject(decision.reason);
+    const next: EditorialPost = {
+      ...current, status: decision.nextStatus,
+      publishedAt: decision.nextPublishedAt,
+      revision: current.revision + 1,
+    };
+    const outcome = await this.repo.compareAndSave(next, input.expectedRevision);
+    return outcome === 'updated' ? accept(next)
+      : reject(outcome === 'duplicate-slug' ? 'duplicate-slug' : 'stale-revision');
+  }
+
+  /** Cancela um agendamento com CAS e volta a rascunho, nunca publica. */
+  async cancelSchedule(
+    actor: EditorialActor, input: PublishDraftInput,
+  ): Promise<UseCaseResult<EditorialPost>> {
+    if (!knownRole(actor.role) || !validId(actor.id)) return reject('forbidden');
+    if (!validId(input.postId) || !revisionValid(input.expectedRevision)) return reject('invalid-input');
+    const current = await this.repo.findById(input.postId);
+    if (!current) return reject('not-found');
+    if (current.status !== 'scheduled') return reject('invalid-transition');
+
+    const decision = decideEditorialTransition(
+      actor, current, { operation: 'unschedule', expectedRevision: input.expectedRevision },
+      this.clock.nowIso(),
+    );
+    if (!decision.ok) return reject(decision.reason);
+    const next: EditorialPost = {
+      ...current, status: decision.nextStatus,
+      publishedAt: decision.nextPublishedAt,
+      revision: current.revision + 1,
+    };
+    const outcome = await this.repo.compareAndSave(next, input.expectedRevision);
+    return outcome === 'updated' ? accept(next)
+      : reject(outcome === 'duplicate-slug' ? 'duplicate-slug' : 'stale-revision');
+  }
+}
