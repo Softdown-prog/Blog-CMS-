@@ -10,6 +10,7 @@ export interface AdminPostSummary {
   readonly revision: number;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly scheduledAt: string | null;
   readonly publishedAt: string | null;
 }
 
@@ -114,7 +115,7 @@ function beforeBoundary(row: AdminPostSummary, boundary: AdminListBoundary): boo
 
 const LIST_FIELDS = [
   'id', 'authorId', 'title', 'slug', 'excerpt', 'status', 'revision',
-  'createdAt', 'updatedAt', 'publishedAt',
+  'createdAt', 'updatedAt', 'scheduledAt', 'publishedAt',
 ] as const;
 
 function validateRows(rows: readonly AdminPostSummary[], selection: AdminListSelection): boolean {
@@ -129,6 +130,7 @@ function validateRows(rows: readonly AdminPostSummary[], selection: AdminListSel
       || !Number.isSafeInteger(row.revision) || row.revision < 0
       || typeof row.title !== 'string' || typeof row.slug !== 'string'
       || typeof row.excerpt !== 'string'
+      || !(row.scheduledAt === null || validTimestamp(row.scheduledAt))
       || !(row.publishedAt === null || validTimestamp(row.publishedAt))
       || (selection.authorId !== null && row.authorId !== selection.authorId)
       || (selection.status !== null && row.status !== selection.status)

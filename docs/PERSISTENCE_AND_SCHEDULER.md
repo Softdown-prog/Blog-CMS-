@@ -15,7 +15,8 @@ Ele propõe:
 1. `cms_posts.revision BIGINT`, não negativo, para comparar versões.
 2. `cms_post_revisions.snapshot JSONB` de EditorialPost inteiro, com índice
    por post_id + revision decrescente e unicidade por (post_id, revision).
-3. Índices para listagem administrativa e seleção de agendas vencidas.
+3. Índices para listagem administrativa e seleção de agendas vencidas por `scheduled_at`.
+4. Origem de cada revisão discriminada entre usuário e serviço automático, sem usuário fictício.
 
 Contrato transacional futuro:
 - CreateDraft: INSERT do post e INSERT do snapshot revision 0 no mesmo COMMIT.
@@ -28,15 +29,9 @@ Contrato transacional futuro:
 - Qualquer falha => ROLLBACK. Não enviar e-mail, webhook ou outro efeito
   externo no interior dessa transação.
 
-**Importante:** o modelo atual reutiliza `publishedAt` para a hora agendada
-quando `status='scheduled'`. Antes de qualquer integração real, decidir e
-executar refatoração para campos distintos `scheduledAt` e `publishedAt`.
-Não misturar as semânticas durante a implantação.
+**Resolvido em código:** agora `scheduledAt` representa o agendamento e `publishedAt` a publicação efetiva. A proposta 002 também inclui a coluna `scheduled_at`, sem execução em banco real. Ver [EDITORIAL_DATES_AUDIT.md](EDITORIAL_DATES_AUDIT.md).
 
-**Pendência de auditoria:** a tabela existente exige `editor_id` ligado a um
-usuário. Uma publicação automática precisa de identidade de serviço auditável,
-sem login interativo, ou de um modelo formal de origem de alterações. Não há
-implementação disso ainda. O protótipo não pode ser considerado banco pronto.
+**Auditoria especificada:** a revisão agora tem origem tipada `user` ou `system` e a proposta SQL diferencia `editor_id` de `system_key`. A persistência auditável e autorização do executor ainda NÃO foram implementadas. O protótipo não é banco pronto.
 
 ## Dispatcher e idempotência
 `ScheduledPublicationDispatcher.runOnce(limit=25)` obtém um único timestamp

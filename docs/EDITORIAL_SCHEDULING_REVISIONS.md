@@ -9,17 +9,17 @@ O núcleo de casos de uso continua em TypeScript puro, independente de Angular, 
 - Apenas editor e administrador podem agendar.
 - O artigo deve estar em rascunho ou já agendado e ser publicável.
 - Data ISO 8601 UTC **canônica** estritamente no futuro, comparada ao relógio injetado pelo servidor.
-- A transição para scheduled salva a data prevista no campo publishedAt **como compatibilidade temporária** com a migração 001.
+- A transição para scheduled define `scheduledAt` (não `publishedAt`) no domínio. A proposta 002 cria `scheduled_at` no banco, ainda não executada.
 - Atualização exige expectedRevision e compare-and-swap do repositório; não aceita corrida entre edições.
 - O estado scheduled **NÃO é publicado no blog**; falta implementar o serviço que confirmará a data e publicará.
 
 ### CancelSchedule
 - Apenas editor e administrador podem cancelar artigo que esteja scheduled.
-- Retorna para draft com data de publicação nula e nova revisão.
+- Retorna para draft com `scheduledAt` e `publishedAt` nulos, e nova revisão.
 - Sem exclusão, sem envio a filas e sem alterações de artigo publicado.
 
 ### ListEditorialRevisions
-- Revisões imutáveis, com postId, número da revisão, editor, timestamp UTC e snapshot editorial v1 completo.
+- Revisões imutáveis, com postId, número, origem auditável (`user` ou `system`), timestamp UTC e snapshot completo.
 - Autores leem apenas revisões dos próprios **rascunhos**.
 - Editor e administrador podem consultar revisões de artigos de todos os estados.
 - Paginação por revision DESC, limite 1–20 e marcador beforeRevision; validar antes de retornar.
@@ -39,3 +39,6 @@ A migração 001 não dispõe de revision no post nem snapshot completo na tabel
 Ator deve ser derivado de sessão autenticada no backend. Estes contratos não autentificam por conta própria e não podem ser expostos em controller antes de RBAC, CSRF e rate limit. Regras do domínio não substituem a autorização HTTP.
 
 Os testes usam repositórios simulados: permissão, datas, agendamento/cancelamento, concorrência, visibilidade de revisões, paginação e resistência a respostas incorretas. A CI executa TypeScript/Nest, testes, SAC-PRE001, Angular AOT e SAC-P001 do Data_libray. Isso não é teste PostgreSQL nem Guardian/Chromium.
+
+
+As origens de usuário e de sistema, bem como a separação `scheduledAt`/`publishedAt`, são detalhadas em [EDITORIAL_DATES_AUDIT.md](EDITORIAL_DATES_AUDIT.md).

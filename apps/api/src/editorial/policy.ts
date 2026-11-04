@@ -18,6 +18,7 @@ export interface EditorialPost {
   readonly slug: string;
   readonly excerpt: string;
   readonly body: unknown;
+  readonly scheduledAt: string | null;
   readonly publishedAt: string | null;
 }
 
@@ -32,7 +33,7 @@ export type DecisionError =
   | 'invalid-schedule' | 'not-publishable';
 
 export type EditorialDecision =
-  | Readonly<{ ok: true; nextStatus: EditorialStatus; nextPublishedAt: string | null }>
+  | Readonly<{ ok: true; nextStatus: EditorialStatus; nextScheduledAt: string | null; nextPublishedAt: string | null }>
   | Readonly<{ ok: false; reason: DecisionError }>;
 
 const transitions: Readonly<Record<EditorialStatus, readonly EditorialOperation[]>> = {
@@ -89,22 +90,21 @@ export function decideEditorialTransition(
   if (now === null) return failure('invalid-schedule');
 
   if (command.operation === 'edit') {
-    return { ok: true, nextStatus: post.status, nextPublishedAt: post.publishedAt };
+    return { ok: true, nextStatus: post.status, nextScheduledAt: post.scheduledAt, nextPublishedAt: post.publishedAt };
   }
   if (command.operation === 'schedule') {
     const at = instant(command.scheduledAt);
     if (at === null || at <= now) return failure('invalid-schedule');
     if (!publishable(post)) return failure('not-publishable');
-    return { ok: true, nextStatus: 'scheduled', nextPublishedAt: command.scheduledAt ?? null };
+    return { ok: true, nextStatus: 'scheduled', nextScheduledAt: command.scheduledAt ?? null, nextPublishedAt: null };
   }
   if (command.operation === 'publish') {
     if (!publishable(post)) return failure('not-publishable');
-    return { ok: true, nextStatus: 'published', nextPublishedAt: nowIso };
+    return { ok: true, nextStatus: 'published', nextScheduledAt: null, nextPublishedAt: nowIso };
   }
   if (command.operation === 'archive') {
-    return { ok: true, nextStatus: 'archived', nextPublishedAt: post.publishedAt };
+    return { ok: true, nextStatus: 'archived', nextScheduledAt: null, nextPublishedAt: post.publishedAt };
   }
   // Cancelar agendamento ou restaurar do arquivo exige reedição/revisão antes de publicar.
-  return { ok: true, nextStatus: 'draft', nextPublishedAt: null };
+  return { ok: true, nextStatus: 'draft', nextScheduledAt: null, nextPublishedAt: null };
 }
-

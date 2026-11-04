@@ -40,7 +40,7 @@ Não salvar HTML bruto do editor no banco. Imagens só por referência a mídia 
 | published | edit, archive | published, archived |
 | archived | restore | draft |
 
-Um \`schedule\` exige timestamp ISO UTC no futuro; o timestamp fica em \`published_at\` para compatibilidade provisória com a migração 001. **Não há publicador automático**: a promoção de scheduled para published exigirá mecanismo e testes separados. \`publish\` direto usa instante do servidor como data de publicação; \`archive\` conserva o histórico de data e \`restore\` reinicia sem data.
+Um \`schedule\` exige timestamp ISO UTC no futuro; o domínio agora utiliza \`scheduledAt\` distinto de \`publishedAt\`, e a proposta 002 prevê coluna \`scheduled_at\`. **Não há publicador automático**: a promoção de scheduled para published exigirá mecanismo e testes separados. \`publish\` direto usa instante do servidor como data de publicação; \`archive\` limpa o agendamento e conserva data efetiva anterior, quando houver; \`restore\` reinicia sem data.
 
 ### Perfis
 - \`author\`: editar/arquivar **somente** o próprio rascunho.
@@ -64,4 +64,3 @@ Validação negativa de schema, HTML não confiável, campos indevidos, limites 
 6. SEO, páginas públicas, logs sem dados sensíveis, observabilidade e limites de recursos.
 
 O Data_libray/SAC existente deve continuar validando o build; não acoplar a biblioteca ao domínio. Nenhum deploy, provisionamento de banco ou criação de PR/merge nesta etapa.
-

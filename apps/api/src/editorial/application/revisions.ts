@@ -1,12 +1,13 @@
 import { DocumentValidationError, parseEditorialDocument } from '../document';
 import type { EditorialActor, EditorialPost, EditorialStatus } from '../policy';
 import type { EditorialRepository } from './ports';
+import { isRevisionOrigin, RevisionOrigin } from './revision-origin';
 
 /** Registro de revisão imutável: snapshot completo do conteúdo editorial, sem credenciais. */
 export interface EditorialRevision {
   readonly postId: string;
   readonly revision: number;
-  readonly editedBy: string;
+  readonly origin: RevisionOrigin;
   readonly recordedAt: string;
   readonly snapshot: EditorialPost;
 }
@@ -36,9 +37,9 @@ export type RevisionResult =
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUS: readonly EditorialStatus[] = ['draft', 'scheduled', 'published', 'archived'];
-const REVISION_KEYS = ['postId', 'revision', 'editedBy', 'recordedAt', 'snapshot'];
+const REVISION_KEYS = ['postId', 'revision', 'origin', 'recordedAt', 'snapshot'];
 const SNAPSHOT_KEYS = [
-  'id', 'authorId', 'revision', 'status', 'title', 'slug', 'excerpt', 'body', 'publishedAt',
+  'id', 'authorId', 'revision', 'status', 'title', 'slug', 'excerpt', 'body', 'scheduledAt', 'publishedAt',
 ];
 
 function uuid(value: unknown): value is string {
@@ -68,6 +69,7 @@ function isSnapshot(value: unknown, current: EditorialPost, revision: number): v
     || typeof value.slug !== 'string'
     || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value.slug) || value.slug.length > 100
     || typeof value.excerpt !== 'string' || value.excerpt.length > 500
+    || !(value.scheduledAt === null || utcIso(value.scheduledAt))
     || !(value.publishedAt === null || utcIso(value.publishedAt))) return false;
   try {
     parseEditorialDocument(value.body);
@@ -89,7 +91,7 @@ function validRecords(
   for (const row of rows) {
     if (!hasExactKeys(row, REVISION_KEYS)
       || !uuid(row.postId) || row.postId !== current.id
-      || !uuid(row.editedBy) || !utcIso(row.recordedAt)
+      || !isRevisionOrigin(row.origin) || !utcIso(row.recordedAt)
       || !Number.isSafeInteger(row.revision) || row.revision < 0
       || row.revision > current.revision || row.revision >= previous
       || !isSnapshot(row.snapshot, current, row.revision)) return false;
@@ -148,4 +150,3 @@ export class ListEditorialRevisions {
     };
   }
 }
-

@@ -16,7 +16,7 @@ const draft: EditorialPost = {
   id: ID, authorId: AUTHOR, status: 'draft', revision: 2,
   title: 'Publicação prevista', slug: 'publicacao-prevista', excerpt: 'Resumo',
   body: { schemaVersion: 1, blocks: [{ type: 'paragraph', text: 'Conteúdo validado.' }] },
-  publishedAt: null,
+  scheduledAt: null, publishedAt: null,
 };
 
 class FakeRepository implements EditorialRepository {
@@ -57,7 +57,8 @@ test('editor agenda rascunho para horário futuro, sem publicar', async () => {
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(result.value.status, 'scheduled');
-  assert.equal(result.value.publishedAt, FUTURE);
+  assert.equal(result.value.scheduledAt, FUTURE);
+  assert.equal(result.value.publishedAt, null);
   assert.equal(result.value.revision, 3);
   assert.equal(repo.current.status, 'scheduled');
   assert.equal(repo.writes, 1);
@@ -69,7 +70,7 @@ test('autor não pode agendar nem cancelar, mesmo sendo dono', async () => {
     postId: ID, expectedRevision: 2, scheduledAt: FUTURE,
   }), { ok: false, error: 'forbidden' });
   assert.equal(repo.writes, 0);
-  repo.current = { ...repo.current, status: 'scheduled', publishedAt: FUTURE };
+  repo.current = { ...repo.current, status: 'scheduled', scheduledAt: FUTURE };
   assert.deepEqual(await commands(repo).cancelSchedule(author, {
     postId: ID, expectedRevision: 2,
   }), { ok: false, error: 'forbidden' });
@@ -107,13 +108,15 @@ test('editor pode reagendar e cancelar; cancelamento volta a draft', async () =>
     postId: ID, expectedRevision: 3, scheduledAt: newTime,
   });
   assert.equal(moved.ok, true);
-  assert.equal(repo.current.publishedAt, newTime);
+  assert.equal(repo.current.scheduledAt, newTime);
+  assert.equal(repo.current.publishedAt, null);
   const cancelled = await commands(repo).cancelSchedule(editor, {
     postId: ID, expectedRevision: 4,
   });
   assert.equal(cancelled.ok, true);
   if (!cancelled.ok) return;
   assert.equal(cancelled.value.status, 'draft');
+  assert.equal(cancelled.value.scheduledAt, null);
   assert.equal(cancelled.value.publishedAt, null);
   assert.equal(cancelled.value.revision, 5);
   assert.equal(repo.writes, 3);
@@ -147,4 +150,3 @@ test('artigo publicado não pode ser agendado neste fluxo', async () => {
     postId: ID, expectedRevision: 2, scheduledAt: FUTURE,
   }), { ok: false, error: 'invalid-transition' });
 });
-

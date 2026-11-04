@@ -1,10 +1,11 @@
 import type { EditorialClock } from './ports';
+import { SCHEDULED_PUBLISHER_ORIGIN, SystemRevisionOrigin } from './revision-origin';
 
 /** Snapshot mínimo para seleção; nunca enviar corpo editorial ao dispatcher. */
 export interface DuePublication {
   readonly id: string;
   readonly revision: number;
-  /** Hora agendada em ISO UTC; na versão 1 corresponde a publishedAt do status scheduled. */
+  /** Hora agendada em ISO UTC; corresponde exclusivamente a scheduledAt. */
   readonly dueAt: string;
 }
 
@@ -20,7 +21,7 @@ export interface DuePublication {
  */
 export interface ScheduledPublicationStore {
   listDue(nowIso: string, limit: number): Promise<readonly DuePublication[]>;
-  publishIfDue(candidate: DuePublication, nowIso: string): Promise<'published' | 'skipped'>;
+  publishIfDue(candidate: DuePublication, nowIso: string, origin: SystemRevisionOrigin): Promise<'published' | 'skipped'>;
 }
 
 export type DispatchResult =
@@ -85,7 +86,7 @@ export class ScheduledPublicationDispatcher {
     let skipped = 0;
     // Sequencial e limitado; a concorrência real entre runners depende de CAS.
     for (const candidate of rows) {
-      const result = await this.store.publishIfDue(candidate, nowIso);
+      const result = await this.store.publishIfDue(candidate, nowIso, SCHEDULED_PUBLISHER_ORIGIN);
       if (result === 'published') published++;
       else if (result === 'skipped') skipped++;
       else throw new Error('ScheduledPublicationStore retornou um estado desconhecido');
@@ -93,4 +94,3 @@ export class ScheduledPublicationDispatcher {
     return { ok: true, selected: rows.length, published, skipped };
   }
 }
-

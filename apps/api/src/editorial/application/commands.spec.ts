@@ -61,6 +61,7 @@ test('cria rascunho com autor e revisão inicial 0', async () => {
   assert.equal(result.value.revision, 0);
   assert.equal(result.value.authorId, AUTHOR_ID);
   assert.equal(result.value.status, 'draft');
+  assert.equal(result.value.scheduledAt, null);
   assert.equal(result.value.publishedAt, null);
   assert.equal(repo.writes, 1);
 });
@@ -141,6 +142,7 @@ test('somente editor publica rascunho completo', async () => {
   if (!published.ok) return;
   assert.equal(published.value.status, 'published');
   assert.equal(published.value.publishedAt, NOW);
+  assert.equal(published.value.scheduledAt, null);
   assert.equal(published.value.revision, 1);
 });
 
@@ -172,4 +174,3 @@ test('identificador inválido e artigo ausente não geram gravação', async () 
   }), { ok: false, error: 'not-found' });
   assert.equal(repo.writes, 0);
 });
-

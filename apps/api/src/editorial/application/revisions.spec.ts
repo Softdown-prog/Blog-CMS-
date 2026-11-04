@@ -18,14 +18,14 @@ const post: EditorialPost = {
   id: POST_ID, authorId: AUTHOR_ID, status: 'draft', revision: 3,
   title: 'Artigo', slug: 'artigo', excerpt: 'Resumo',
   body: { schemaVersion: 1, blocks: [{ type: 'paragraph', text: 'Texto atual' }] },
-  publishedAt: null,
+  scheduledAt: null, publishedAt: null,
 };
 
 function record(revision: number): EditorialRevision {
   return {
     postId: POST_ID,
     revision,
-    editedBy: EDITOR_ID,
+    origin: { kind: 'user', userId: EDITOR_ID },
     recordedAt: AT,
     snapshot: {
       ...post,
@@ -131,6 +131,8 @@ test('snapshot com token extra ou documento malformado nunca é devolvido', asyn
     { ...record(3), snapshot: { ...record(3).snapshot, passwordHash: 'SECRET' } },
     { ...record(3), snapshot: { ...record(3).snapshot, body: { schemaVersion: 1, blocks: [{ type: 'iframe' }] } } },
     { ...record(3), snapshot: { ...record(3).snapshot, authorId: OTHER_ID } },
+    { ...record(3), origin: { kind: 'system', service: 'unknown' } },
+    { ...record(3), origin: { kind: 'user', userId: 'fake-user', token: 'SECRET' } },
   ];
   for (const item of badRecords) {
     const result = await reader(post, new FakeRevisions([item])).execute(editor, { postId: POST_ID });
@@ -155,3 +157,17 @@ test('snapshot inexistente não revela histórico e não chama reader', async ()
   assert.equal(history.calls, 0);
 });
 
+
+test('publicação automática tem proveniência de serviço explícita, sem usuário fictício', async () => {
+  const systemRevision: EditorialRevision = {
+    ...record(3), origin: { kind: 'system', service: 'scheduled-publisher' },
+  };
+  const result = await reader(post, new FakeRevisions([systemRevision])).execute(editor, {
+    postId: POST_ID,
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.value.items[0]?.origin, {
+    kind: 'system', service: 'scheduled-publisher',
+  });
+});

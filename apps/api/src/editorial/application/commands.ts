@@ -109,7 +109,7 @@ export class EditorialCommands {
     if (!validId(id)) return reject('invalid-input');
     const post: EditorialPost = {
       id, authorId: actor.id, revision: 0, status: 'draft',
-      ...parsed.value, publishedAt: null,
+      ...parsed.value, scheduledAt: null, publishedAt: null,
     };
     const result = await this.repo.createDraft(post);
     return result === 'created' ? accept(post) : reject('duplicate-slug');
@@ -158,6 +158,7 @@ export class EditorialCommands {
 
     const next: EditorialPost = {
       ...current, status: decision.nextStatus,
+      scheduledAt: decision.nextScheduledAt,
       publishedAt: decision.nextPublishedAt,
       revision: current.revision + 1,
     };
@@ -191,6 +192,7 @@ export class EditorialCommands {
     if (!decision.ok) return reject(decision.reason);
     const next: EditorialPost = {
       ...current, status: decision.nextStatus,
+      scheduledAt: decision.nextScheduledAt,
       publishedAt: decision.nextPublishedAt,
       revision: current.revision + 1,
     };
@@ -216,6 +218,7 @@ export class EditorialCommands {
     if (!decision.ok) return reject(decision.reason);
     const next: EditorialPost = {
       ...current, status: decision.nextStatus,
+      scheduledAt: decision.nextScheduledAt,
       publishedAt: decision.nextPublishedAt,
       revision: current.revision + 1,
     };

@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   DuePublication, ScheduledPublicationDispatcher, ScheduledPublicationStore,
 } from './scheduled-dispatcher';
+import type { SystemRevisionOrigin } from './revision-origin';
 
 const NOW = '2026-11-04T14:00:00.000Z';
 const BEFORE = '2026-11-03T14:00:00.000Z';
@@ -38,7 +39,8 @@ class FakeScheduledStore implements ScheduledPublicationStore {
       .map(row => ({ id: row.id, revision: row.revision, dueAt: row.dueAt }));
   }
 
-  async publishIfDue(candidate: DuePublication, nowIso: string): Promise<'published' | 'skipped'> {
+  async publishIfDue(candidate: DuePublication, nowIso: string, origin: SystemRevisionOrigin): Promise<'published' | 'skipped'> {
+    assert.deepEqual(origin, { kind: 'system', service: 'scheduled-publisher' });
     this.writeCalls++;
     this.beforePublish?.();
     const current = this.entries.get(candidate.id);
@@ -199,4 +201,3 @@ test('retorno de publicação desconhecido é erro de contrato, nunca sucesso', 
   };
   await assert.rejects(dispatcher(store).runOnce(), /estado desconhecido/);
 });
-

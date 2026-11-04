@@ -14,7 +14,8 @@ function row(n: number, authorId: string = AUTHOR, status: EditorialStatus = 'dr
     id: '00000000-0000-4000-8000-' + n.toString(16).padStart(12, '0'),
     authorId, status, title: 'Post ' + n, slug: 'post-' + n,
     excerpt: 'Resumo', revision: 0, createdAt: DAY,
-    updatedAt: DAY, publishedAt: status === 'published' ? DAY : null,
+    updatedAt: DAY, scheduledAt: status === 'scheduled' ? DAY : null,
+    publishedAt: status === 'published' ? DAY : null,
   };
 }
 

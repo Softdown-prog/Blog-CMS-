@@ -12,7 +12,7 @@ const draft: EditorialPost = {
   id: 'post-1', authorId: author.id, revision: 3, status: 'draft',
   title: 'Meu artigo', slug: 'meu-artigo', excerpt: 'Apresentação',
   body: { schemaVersion: 1, blocks: [{ type: 'paragraph', text: 'Conteúdo inicial' }] },
-  publishedAt: null,
+  scheduledAt: null, publishedAt: null,
 };
 const command = (operation: EditorialCommand['operation'], extra: Partial<EditorialCommand> = {}): EditorialCommand =>
   ({ operation, expectedRevision: 3, ...extra });
@@ -26,7 +26,7 @@ test('autor pode editar ou arquivar somente seu próprio rascunho', () => {
 
 test('editor agenda no futuro; agendamento passado ou formato inseguro são bloqueados', () => {
   assert.deepEqual(decideEditorialTransition(editor, draft, command('schedule', { scheduledAt: TOMORROW }), NOW),
-    { ok: true, nextStatus: 'scheduled', nextPublishedAt: TOMORROW });
+    { ok: true, nextStatus: 'scheduled', nextScheduledAt: TOMORROW, nextPublishedAt: null });
   assert.deepEqual(decideEditorialTransition(editor, draft, command('schedule', { scheduledAt: NOW }), NOW),
     { ok: false, reason: 'invalid-schedule' });
   assert.deepEqual(decideEditorialTransition(editor, draft, command('schedule', { scheduledAt: '2030-01-01' }), NOW),
@@ -35,7 +35,7 @@ test('editor agenda no futuro; agendamento passado ou formato inseguro são bloq
 
 test('publicação exige título, slug e conteúdo válido', () => {
   assert.deepEqual(decideEditorialTransition(editor, draft, command('publish'), NOW),
-    { ok: true, nextStatus: 'published', nextPublishedAt: NOW });
+    { ok: true, nextStatus: 'published', nextScheduledAt: null, nextPublishedAt: NOW });
   const bad = [
     { ...draft, title: ' ' },
     { ...draft, slug: '../admin' },
@@ -58,12 +58,12 @@ test('revisão desatualizada não autoriza nenhuma transição', () => {
 test('estado arquivado só pode ser restaurado; editor pode cancelar agendamento', () => {
   const archived: EditorialPost = { ...draft, status: 'archived', publishedAt: TOMORROW };
   assert.deepEqual(decideEditorialTransition(admin, archived, command('restore'), NOW),
-    { ok: true, nextStatus: 'draft', nextPublishedAt: null });
+    { ok: true, nextStatus: 'draft', nextScheduledAt: null, nextPublishedAt: null });
   assert.deepEqual(decideEditorialTransition(admin, archived, command('publish'), NOW),
     { ok: false, reason: 'invalid-transition' });
-  const scheduled: EditorialPost = { ...draft, status: 'scheduled', publishedAt: TOMORROW };
+  const scheduled: EditorialPost = { ...draft, status: 'scheduled', scheduledAt: TOMORROW };
   assert.deepEqual(decideEditorialTransition(editor, scheduled, command('unschedule'), NOW),
-    { ok: true, nextStatus: 'draft', nextPublishedAt: null });
+    { ok: true, nextStatus: 'draft', nextScheduledAt: null, nextPublishedAt: null });
   assert.deepEqual(decideEditorialTransition(author, scheduled, command('edit'), NOW),
     { ok: false, reason: 'forbidden' });
 });
@@ -73,4 +73,3 @@ test('decisão não muda objeto original nem faz IO', () => {
   decideEditorialTransition(editor, draft, command('publish'), NOW);
   assert.equal(JSON.stringify(draft), before);
 });
-
