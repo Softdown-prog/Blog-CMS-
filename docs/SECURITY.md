@@ -12,3 +12,7 @@
 ## Autorização administrativa sem integração
 
 O contrato de verificação de sessão e permissões foi iniciado em apps/api/src/security/admin-session.ts. Confira ADMIN_SESSION_ARCHITECTURE.md para requisitos, limites e testes. Nenhuma rota de login, cookie ou banco de sessões foi ligada ao runtime.
+
+## Credenciais e recuperação sem integração
+
+Casos de uso puros e portas para senha Argon2id, reserva atômica de tentativas e recuperação de uso único foram adicionados. **Não há login HTTP nem envio de e-mail real.** Ver [CREDENTIALS_RECOVERY.md](CREDENTIALS_RECOVERY.md) para limitações, riscos e pré-requisitos de integração.

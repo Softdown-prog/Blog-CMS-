@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json",
     "start:prod": "node dist/main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && node --test dist/posts.service.spec.js dist/editorial/document.spec.js dist/editorial/policy.spec.js dist/editorial/application/commands.spec.js dist/editorial/application/admin-list.spec.js dist/editorial/application/scheduling.spec.js dist/editorial/application/revisions.spec.js dist/editorial/application/scheduled-dispatcher.spec.js dist/editorial/application/revision-origin.spec.js dist/editorial/application/restore-draft.spec.js dist/security/admin-session.spec.js dist/security/session-lifecycle.spec.js"
+    "test": "npm run build && node --test dist/posts.service.spec.js dist/editorial/document.spec.js dist/editorial/policy.spec.js dist/editorial/application/commands.spec.js dist/editorial/application/admin-list.spec.js dist/editorial/application/scheduling.spec.js dist/editorial/application/revisions.spec.js dist/editorial/application/scheduled-dispatcher.spec.js dist/editorial/application/revision-origin.spec.js dist/editorial/application/restore-draft.spec.js dist/security/admin-session.spec.js dist/security/session-lifecycle.spec.js dist/security/password-login.spec.js dist/security/password-recovery.spec.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",

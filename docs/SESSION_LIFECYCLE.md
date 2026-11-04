@@ -60,3 +60,7 @@ Falha de persistência propaga exceção, nunca deve retornar sucesso falso.
 Testes isolados de emissão, formato e hashes, prazo absoluto e idle, rotação
 repetida/concorrente, CSRF, logout e revogação global. SAC pre/build/post
 continua na CI, sem autorizar deploy.
+
+## Autenticação prévia ao issue
+
+O contrato `VerifyPasswordLogin` agora pode produzir uma prova interna `VerifiedLogin` quando um `PasswordVerifier` confiável aceitar uma senha e o limitador conceder uma tentativa. **Esta prova não deve ser exposta como DTO HTTP**. Ver [CREDENTIALS_RECOVERY.md](CREDENTIALS_RECOVERY.md). A integração real com Argon2id, limitação compartilhada e recuperação está pendente.
