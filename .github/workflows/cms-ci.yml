@@ -1,7 +1,7 @@
 name: Blog CMS - build e SAC
 on:
   push:
-    branches: ['feat/cms-angular-nest-sac-foundation']
+    branches: ['feat/cms-postgres-public-posts']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -35,7 +35,7 @@ jobs:
           npm ci --prefix apps/api --ignore-scripts --no-audit --no-fund
       - name: Compilar backend NestJS
         run: npm run build --prefix apps/api
-      - name: Instalar ferramentas SAC isoladas
+      - name: Testes do backend (consultas PostgreSQL simuladas)\n        run: npm test --prefix apps/api\n      - name: Instalar ferramentas SAC isoladas
         run: |
           npm ci --prefix _sac/packages/angular-core --ignore-scripts --no-audit --no-fund
           npm ci --prefix _sac/packages/angular-precompiler --ignore-scripts --no-audit --no-fund
@@ -52,4 +52,5 @@ jobs:
             apps/web/package-lock.json
             apps/api/package-lock.json
           if-no-files-found: ignore
+
 

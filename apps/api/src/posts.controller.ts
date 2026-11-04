@@ -1,19 +1,13 @@
 import { Controller, Get } from '@nestjs/common';
-
-interface PublicPostSummary {
-  readonly id: string;
-  readonly slug: string;
-  readonly title: string;
-  readonly excerpt: string;
-  readonly publishedAt: string;
-}
+import { PostsService, PublicPostSummary } from './posts.service';
 
 @Controller('public/posts')
 export class PostsController {
-  // Etapa 1: sem acesso ao banco, sem dados inventados e sem rotas de escrita.
+  constructor(private readonly posts: PostsService) {}
+
   @Get()
-  listPublic(): readonly PublicPostSummary[] {
-    return [];
+  listPublic(): Promise<readonly PublicPostSummary[]> {
+    return this.posts.listPublic();
   }
 }
 

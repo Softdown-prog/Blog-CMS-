@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { catchError, of } from 'rxjs';
+import { catchError, map, of } from 'rxjs';
 
 interface PostSummary {
   readonly id: string;
@@ -10,6 +10,10 @@ interface PostSummary {
   readonly excerpt: string;
   readonly publishedAt: string;
 }
+type PostState =
+  | { readonly status: 'loading'; readonly posts: readonly PostSummary[] }
+  | { readonly status: 'ready'; readonly posts: readonly PostSummary[] }
+  | { readonly status: 'error'; readonly posts: readonly PostSummary[] };
 
 @Component({
   selector: 'blog-home',
@@ -20,13 +24,19 @@ interface PostSummary {
       <h1>Artigos e novidades</h1>
       <p>Área pública do Blog CMS.</p>
       <div class="posts" aria-live="polite">
-        @for (post of posts(); track post.id) {
-          <article class="panel">
-            <h2>{{ post.title }}</h2>
-            <p>{{ post.excerpt }}</p>
-          </article>
-        } @empty {
-          <p class="panel">Ainda não existem publicações. O backend está em preparação.</p>
+        @if (state().status === 'loading') {
+          <p class="panel">Carregando artigos…</p>
+        } @else if (state().status === 'error') {
+          <p class="panel" role="alert">Não foi possível carregar os artigos agora.</p>
+        } @else {
+          @for (post of state().posts; track post.id) {
+            <article class="panel">
+              <h2>{{ post.title }}</h2>
+              <p>{{ post.excerpt }}</p>
+            </article>
+          } @empty {
+            <p class="panel">Ainda não existem artigos publicados.</p>
+          }
         }
       </div>
     </section>
@@ -34,11 +44,13 @@ interface PostSummary {
 })
 export class HomeComponent {
   private readonly http = inject(HttpClient);
-  protected readonly posts = toSignal(
+  protected readonly state = toSignal(
     this.http.get<readonly PostSummary[]>('/api/public/posts').pipe(
-      catchError(() => of([] as readonly PostSummary[])),
+      map((posts): PostState => ({ status: 'ready', posts })),
+      catchError((): ReturnType<typeof of<PostState>> =>
+        of({ status: 'error', posts: [] })),
     ),
-    { initialValue: [] as readonly PostSummary[] },
+    { initialValue: { status: 'loading', posts: [] } as PostState },
   );
 }
 
