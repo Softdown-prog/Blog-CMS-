@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { normalizeLoginEmail } from './password-login';
+import { NewPasswordPolicy } from './new-password-policy';
 
 export interface RecoveryStore {
   /**
@@ -57,8 +58,6 @@ export type RecoveryCompleteResult =
 
 const NETWORK_KEY = /^[a-f0-9]{64}$/;
 const RESET_TTL_MS = 15 * 60_000;
-const MIN_PASSWORD_BYTES = 12;
-const MAX_PASSWORD_BYTES = 1024;
 const PHC = /^\$argon2id\$v=19\$m=[0-9]+,t=[0-9]+,p=[0-9]+\$/;
 
 /** Required for one-time recovery secrets (32 random bytes, canonical base64url). */
@@ -77,12 +76,6 @@ function validNow(value: number): boolean {
     && value + RESET_TTL_MS < Number.MAX_SAFE_INTEGER;
 }
 
-function validNewPassword(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  const bytes = Buffer.byteLength(value, 'utf8');
-  return bytes >= MIN_PASSWORD_BYTES && bytes <= MAX_PASSWORD_BYTES;
-}
-
 function tokenDigest(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');
 }
@@ -97,6 +90,7 @@ export class PasswordRecovery {
     private readonly limiter: RecoveryRateLimiter,
     private readonly sender: RecoveryDelivery,
     private readonly hasher: RecoveryPasswordHasher,
+    private readonly passwordPolicy: NewPasswordPolicy,
     private readonly nowMs: () => number,
     private readonly randomToken: () => string =
       () => randomBytes(32).toString('base64url'),
@@ -140,7 +134,8 @@ export class PasswordRecovery {
     if (!await this.limiter.reserveConsume(hash, input.trustedNetworkKey, now)) {
       return { ok: false, reason: 'rate-limited' };
     }
-    if (!validNewPassword(input.newPassword)) {
+    const passwordDecision = await this.passwordPolicy.evaluate(input.newPassword);
+    if (!passwordDecision.ok || typeof input.newPassword !== 'string') {
       return { ok: false, reason: 'invalid-password' };
     }
     const encoded = await this.hasher.hash(input.newPassword);

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { NewPasswordPolicy } from './new-password-policy';
 import test from 'node:test';
 import {
   PasswordRecovery, RecoveryDelivery, RecoveryPasswordHasher,
@@ -89,14 +90,16 @@ function context() {
   const limiter = new FakeLimiter();
   const delivery = new FakeDelivery();
   const hasher = new FakeHasher();
+  const blocked = new Set<string>();
+  const policy = new NewPasswordPolicy({ async containsCandidate(value: string) { return blocked.has(value); } });
   const time = { now: NOW };
   let serial = 1;
   const flow = new PasswordRecovery(
-    store, limiter, delivery, hasher,
+    store, limiter, delivery, hasher, policy,
     () => time.now,
     () => Buffer.alloc(32, serial++).toString('base64url'),
   );
-  return { store, limiter, delivery, hasher, time, flow };
+  return { store, limiter, delivery, hasher, blocked, policy, time, flow };
 }
 
 const request = { email: EMAIL, trustedNetworkKey: NETWORK };
@@ -255,13 +258,13 @@ test('conta desativada durante CAS não aceita redefinição', async () => {
 test('fonte de token e hash de senha inválidos falham fechados', async () => {
   const ctx = context();
   const badSource = new PasswordRecovery(
-    ctx.store, ctx.limiter, ctx.delivery, ctx.hasher, () => NOW, () => 'weak',
+    ctx.store, ctx.limiter, ctx.delivery, ctx.hasher, ctx.policy, () => NOW, () => 'weak',
   );
   await assert.rejects(badSource.request(request), /Insecure recovery token/);
   const token = await challenge(ctx);
   const badHash = new PasswordRecovery(
     ctx.store, ctx.limiter, ctx.delivery,
-    { async hash() { return 'sha256-insecure'; } }, () => NOW,
+    { async hash() { return 'sha256-insecure'; } }, ctx.policy, () => NOW,
   );
   await assert.rejects(badHash.complete({
     token, newPassword: NEW_PASSWORD, trustedNetworkKey: NETWORK,
@@ -278,3 +281,31 @@ test('falha de persistência no CAS é propagada, não retorna sucesso', async (
   }), /DB failure/);
 });
 
+
+
+test('senha de lista de vazamentos nunca chega ao Argon2id nem altera credenciais', async () => {
+  const ctx = context();
+  const token = await challenge(ctx);
+  ctx.blocked.add(NEW_PASSWORD);
+  assert.deepEqual(await ctx.flow.complete({
+    token, newPassword: NEW_PASSWORD, trustedNetworkKey: NETWORK,
+  }), { ok: false, reason: 'invalid-password' });
+  assert.equal(ctx.hasher.calls, 0);
+  assert.equal(ctx.store.completions, 0);
+  ctx.blocked.clear();
+  assert.deepEqual(await ctx.flow.complete({
+    token, newPassword: NEW_PASSWORD, trustedNetworkKey: NETWORK,
+  }), { ok: true });
+});
+
+test('política de recuperação exige comprimento e preserva caracteres de senha', async () => {
+  const ctx = context();
+  const token = await challenge(ctx);
+  for (const bad of ['x'.repeat(14), 'a'.repeat(15) + '\u0000', '🔐'.repeat(400)]) {
+    assert.deepEqual(await ctx.flow.complete({
+      token, newPassword: bad, trustedNetworkKey: NETWORK,
+    }), { ok: false, reason: 'invalid-password' });
+  }
+  assert.equal(ctx.hasher.calls, 0);
+  assert.equal(ctx.store.completions, 0);
+});

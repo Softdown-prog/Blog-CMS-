@@ -16,3 +16,7 @@ O contrato de verificação de sessão e permissões foi iniciado em apps/api/sr
 ## Credenciais e recuperação sem integração
 
 Casos de uso puros e portas para senha Argon2id, reserva atômica de tentativas e recuperação de uso único foram adicionados. **Não há login HTTP nem envio de e-mail real.** Ver [CREDENTIALS_RECOVERY.md](CREDENTIALS_RECOVERY.md) para limitações, riscos e pré-requisitos de integração.
+
+## Política de senha e auditoria tipada
+
+Ver [PASSWORD_POLICY_AUDIT.md](PASSWORD_POLICY_AUDIT.md). São contratos isolados, sem banco, logs reais, endpoints ou integrações.

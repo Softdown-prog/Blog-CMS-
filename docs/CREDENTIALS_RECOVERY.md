@@ -24,10 +24,10 @@
 - A porta de armazenamento só emite desafio para conta habilitada; deve substituir desafios anteriores da mesma conta atomicamente.
 - O token original é enviado exclusivamente a `RecoveryDelivery`, dependência privada futura. Nunca pode aparecer na resposta HTTP, logs ou URL de analytics.
 - Se o envio falhar, a porta tenta invalidar o desafio criado, sem revelar existência da conta.
-- `complete()` exige token canônico, senha nova de 12 a 1024 bytes (limites iniciais), proteção de tentativas e hash Argon2id.
+- `complete()` exige token canônico, política de senha nova com **mínimo de 15 caracteres Unicode e máximo de 1024 bytes**, bloqueio por corpus de senhas comprometidas, proteção de tentativas e hash Argon2id.
 - A porta `consumeAndReset` DEVE, em uma só transação, verificar token ainda válido, consumi-lo UMA vez, atualizar senha e incrementar `authVersion`.
 - Incrementar `authVersion` invalida todas as sessões antigas. Token expirado/usado não pode alterar senha.
-- Uma senha comprometida conhecida ou reutilização de senha antiga ainda precisará de verificações de política na integração final.
+- A rejeição de senhas comprometidas já é obrigatória por porta `PasswordBlocklist`, mas o **corpus real e testes de reutilização de senha antiga ainda precisam ser implementados**. Não transmitir senha em texto claro para serviços externos.
 
 ## Regras de integração final
 - Conectar o limiter com estado compartilhado entre instâncias (limites por IP e por conta, sem armazenar IP/e-mail desnecessariamente).
@@ -36,7 +36,7 @@
 - Garantir respostas uniformes sem diferenças observáveis de status/erro que permitam enumeração; medir timing sob carga.
 - Envio de recuperação por provedor verificado com URL allowlist, domínio canônico, não incluir senha no link e política de redirecionamento estrita.
 - Proteger o token enviado por e-mail de vazamento em referer, cache, logs e monitoramento; preferir fluxo com token consumido no backend.
-- MFA, trilha de auditoria sem segredos, notificações de troca de senha, políticas de senha e tentativas, captcha adaptativo e prevenção de abuso ainda pendentes.
+- MFA, integração transacional da auditoria, notificações de troca de senha, implementação persistente dos limites e prevenção de abuso ainda pendentes. Novos contratos puros de política e auditoria: [PASSWORD_POLICY_AUDIT.md](PASSWORD_POLICY_AUDIT.md).
 - O fluxo de e-mail deve ser resiliente a falhas de entrega; registrar incidentes por canal interno sem expor o identificador na API.
 - Provar CAS em PostgreSQL real descartável e teste de corrida entre duas conexões antes de qualquer deploy.
 
