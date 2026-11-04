@@ -1,0 +1,12 @@
+**/node_modules/
+**/dist/
+**/.angular/
+**/coverage/
+**/.env
+**/.env.*
+!**/.env.example
+**/*.tsbuildinfo
+_sac/
+reports/
+.DS_Store
+

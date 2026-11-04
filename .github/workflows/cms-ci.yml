@@ -1,0 +1,55 @@
+name: Blog CMS - build e SAC
+on:
+  push:
+    branches: ['feat/cms-angular-nest-sac-foundation']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    # Bootstrap no runner descartável: não consumir RAM da VPS antes da homologação.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout CMS
+        uses: actions/checkout@v4
+      - name: Checkout SAC / Data_libray (commit fixo)
+        uses: actions/checkout@v4
+        with:
+          repository: Softdown-prog/Data_libray
+          ref: 3a36bac3fd3a59520fa6ee49bb1e390174368d03
+          path: _sac
+          persist-credentials: false
+      - name: Node compatível com Angular 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.15.0'
+      - name: Gerar locks de bootstrap (não reprodutíveis até versionar)
+        run: |
+          npm install --prefix apps/web --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm install --prefix apps/api --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Instalar dependências CMS a partir dos locks
+        run: |
+          npm ci --prefix apps/web --ignore-scripts --no-audit --no-fund
+          npm ci --prefix apps/api --ignore-scripts --no-audit --no-fund
+      - name: Compilar backend NestJS
+        run: npm run build --prefix apps/api
+      - name: Instalar ferramentas SAC isoladas
+        run: |
+          npm ci --prefix _sac/packages/angular-core --ignore-scripts --no-audit --no-fund
+          npm ci --prefix _sac/packages/angular-precompiler --ignore-scripts --no-audit --no-fund
+          npm ci --prefix _sac/packages/angular-postcompiler --ignore-scripts --no-audit --no-fund
+      - name: SAC-PRE001 + Angular AOT + SAC-P001
+        run: node scripts/sac-build.mjs
+      - name: Salvar evidência e locks de bootstrap
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blog-cms-foundation-evidence
+          path: |
+            reports/sac-static.json
+            apps/web/package-lock.json
+            apps/api/package-lock.json
+          if-no-files-found: ignore
+
