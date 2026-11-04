@@ -117,7 +117,7 @@ test('registro de revisão fora do artigo, fora de ordem ou repetido falha fecha
     [record(3), { ...record(2), postId: OTHER_ID }],
     [record(2), record(3)],
     [record(3), record(3)],
-    [record(3), record(4)],
+    [record(3), { ...record(2), revision: -1 }],
   ];
   for (const variants of rows) {
     const result = await reader(post, new FakeRevisions(variants)).execute(editor, { postId: POST_ID });
