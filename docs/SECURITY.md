@@ -9,3 +9,6 @@
 - Medir recursos livres na VPS antes do deploy; **nenhum deploy automático**.
 - Testes: API e auth, Angular AOT, SAC pre/post, Guardian, Playwright mobile, regressões de XSS e controle de acesso.
 
+## Autorização administrativa sem integração
+
+O contrato de verificação de sessão e permissões foi iniciado em apps/api/src/security/admin-session.ts. Confira ADMIN_SESSION_ARCHITECTURE.md para requisitos, limites e testes. Nenhuma rota de login, cookie ou banco de sessões foi ligada ao runtime.
