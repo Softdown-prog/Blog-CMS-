@@ -26,7 +26,7 @@ A origem de aplicação precisa usar HTTPS, exceto localhost/loopback em testes 
 SameSite é defesa em profundidade, não substitui validação de CSRF nem verificação de origem.
 
 ## Lacunas antes da integração
-- Ainda não existem login, senha Argon2id, emissão ou rotação de token, logout ou limpeza de sessões.
+- Emissão, rotação e revogação agora possuem **contratos internos e testes** em `session-lifecycle.ts`, mas não existem login real, verificador Argon2id, cookies, adaptadores ou limpeza persistente.
 - Não foram implementados Nest Guards, rate limiting, proteção contra fixation e políticas de cabeçalhos.
 - O esquema 001 não tem enabled/auth_version em cms_users nem tabela de sessões.
 - Aplicar migrações e garantir revogação atômica apenas em ambiente descartável durante os testes finais.
@@ -36,3 +36,7 @@ SameSite é defesa em profundidade, não substitui validação de CSRF nem verif
 ## Ordem do projeto
 Contratos puros -> casos de uso e segurança -> interface Angular -> testes isolados e navegador -> integrações e PostgreSQL -> homologação -> deploy.
 SAC/Data_libray verifica compilação e conteúdo estático; uma CI verde não significa login em produção pronto.
+
+## Ciclo de vida (sem integração)
+
+O contrato offline de criação, renovação, logout e revogação global está em [SESSION_LIFECYCLE.md](SESSION_LIFECYCLE.md). A autenticação real e o armazenamento continuam pendentes.

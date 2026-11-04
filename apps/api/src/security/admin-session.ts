@@ -40,7 +40,10 @@ export type AdminAction =
   | 'publish-post'
   | 'schedule-post'
   | 'cancel-schedule'
-  | 'manage-users';
+  | 'manage-users'
+  | 'rotate-session'
+  | 'logout-session'
+  | 'revoke-all-sessions';
 
 export interface AdminCredentialInput {
   /** Token de sessão obtido exclusivamente de cookie no futuro adaptador HTTP. */
@@ -60,9 +63,11 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const ALL_ACTIONS: readonly AdminAction[] = [
   'list-posts', 'view-revisions', 'create-draft', 'edit-draft',
   'restore-draft', 'publish-post', 'schedule-post', 'cancel-schedule', 'manage-users',
+  'rotate-session', 'logout-session', 'revoke-all-sessions',
 ];
 const AUTHOR_ACTIONS: readonly AdminAction[] = [
   'list-posts', 'view-revisions', 'create-draft', 'edit-draft', 'restore-draft',
+  'rotate-session', 'logout-session', 'revoke-all-sessions',
 ];
 const EDITOR_ACTIONS: readonly AdminAction[] = [
   ...AUTHOR_ACTIONS, 'publish-post', 'schedule-post', 'cancel-schedule',
