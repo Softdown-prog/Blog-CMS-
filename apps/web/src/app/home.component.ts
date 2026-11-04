@@ -47,8 +47,7 @@ export class HomeComponent {
   protected readonly state = toSignal(
     this.http.get<readonly PostSummary[]>('/api/public/posts').pipe(
       map((posts): PostState => ({ status: 'ready', posts })),
-      catchError((): ReturnType<typeof of<PostState>> =>
-        of({ status: 'error', posts: [] })),
+      catchError(() => of({ status: 'error' as const, posts: [] as readonly PostSummary[] })),
     ),
     { initialValue: { status: 'loading', posts: [] } as PostState },
   );
