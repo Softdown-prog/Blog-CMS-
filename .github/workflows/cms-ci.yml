@@ -1,7 +1,7 @@
 name: Blog CMS - build e SAC
 on:
   push:
-    branches: ['feat/cms-postgres-public-posts']
+    branches: ['main', 'feat/cms-postgres-public-posts']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -44,6 +44,12 @@ jobs:
           npm ci --prefix _sac/packages/angular-postcompiler --ignore-scripts --no-audit --no-fund
       - name: SAC-PRE001 + Angular AOT + SAC-P001
         run: node scripts/sac-build.mjs
+      - name: Instalar Chromium para testes reais (runner temporário)
+        run: |
+          cd apps/web
+          npx --no-install playwright install --with-deps chromium
+      - name: Playwright - editor no Chromium desktop e mobile emulado
+        run: npm run test:e2e --prefix apps/web
       - name: Salvar evidência e locks de bootstrap
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,6 +59,8 @@ jobs:
             reports/sac-static.json
             apps/web/package-lock.json
             apps/api/package-lock.json
+            apps/web/playwright-report/
+            apps/web/test-results/
           if-no-files-found: ignore
 
 

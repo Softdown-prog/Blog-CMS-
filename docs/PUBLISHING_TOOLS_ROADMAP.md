@@ -109,3 +109,24 @@ persistência autenticada e revisão de acessibilidade permanecem pendentes.
 **Escopo futuro ainda não realizado:** upload de mídias, tags, categorias,
 editor completo com seleções/rich text, salvamento, autenticação HTTP,
 e publicação em banco.
+
+## Fase 2B — testes reais de navegador (Chromium + Playwright)
+
+- Adicionados `apps/web/playwright.config.ts` e `apps/web/e2e/editor.spec.ts`.
+- O Playwright utiliza **o build Angular oficial** do SAC, servido apenas em
+  127.0.0.1:4173 por `scripts/serve-web.mjs` (servidor estático mínimo).
+- Dois projetos: Chromium desktop e Chromium com perfil **Pixel 5 emulado**
+  (não equivale a testar um dispositivo Android físico).
+- Cenários: edição, sugestões de slug/resumo, contagem de palavras e H3,
+  criação/remoção de lista e citação, conteúdo inválido, payload XSS tratado
+  como texto, abrir/fechar prévia, navegação por teclado, ausência de requests
+  de escrita/API, perda de estado após recarregar e overflow horizontal.
+- Workflow roda em runner descartável: `npm run test:e2e --prefix apps/web`.
+  Inclui logs, screenshots e traces apenas em caso de falha.
+- `main` agora também dispara verificações de CI em novos pushes;
+  **isso não ativa nenhum deploy**.
+
+Pendências após esta etapa: checagem em Android físico, acessibilidade com
+leitor de tela, múltiplos tamanhos intermediários, atalhos de teclado,
+persistence/auth HTTP, upload de mídia e banco. Não presumir que compilar e
+passar no Playwright garantam prontidão para produção.
