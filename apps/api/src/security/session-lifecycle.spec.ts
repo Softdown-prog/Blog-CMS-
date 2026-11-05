@@ -61,24 +61,40 @@ class FakeStore implements SessionLifecycleStore {
       && row.idleExpiresAtMs > now;
   }
 
-  async createIfUserCurrent(record: AdminSessionRecord): Promise<'created' | 'rejected'> {
+  async createWithAudit(
+    record: AdminSessionRecord, event: SecurityAuditEvent,
+  ): Promise<'created' | 'rejected'> {
     this.beforeCreate?.();
     if (!this.user?.enabled || this.user.id !== record.userId
       || this.user.authVersion !== record.authVersion
-      || this.rows.has(record.tokenHash)) return 'rejected';
+      || this.rows.has(record.tokenHash)
+      || this.auditOutbox.has(event.eventId)
+      || event.type !== 'session-issued'
+      || event.subject.kind !== 'user' || event.subject.userId !== record.userId) return 'rejected';
+    if (this.failAuditInsert) throw new Error('simulated session audit insert failed');
+    this.auditOutbox.set(event.eventId, structuredClone(event));
     this.rows.set(record.tokenHash, structuredClone(record));
     this.creates++;
     return 'created';
   }
 
-  async rotateIfCurrent(oldHash: string, replacement: AdminSessionRecord, now: number): Promise<boolean> {
+  async rotateWithAudit(
+    oldHash: string, replacement: AdminSessionRecord, now: number, event: SecurityAuditEvent,
+  ): Promise<boolean> {
     this.beforeRotate?.();
     const current = this.rows.get(oldHash);
     if (!current || !this.current(current, now) || replacement.userId !== current.userId
       || replacement.authVersion !== current.authVersion
       || replacement.expiresAtMs !== current.expiresAtMs
       || replacement.idleExpiresAtMs > replacement.expiresAtMs
-      || this.rows.has(replacement.tokenHash)) return false;
+      || this.rows.has(replacement.tokenHash)
+      || this.auditOutbox.has(event.eventId)
+      || event.type !== 'session-rotated'
+      || event.subject.kind !== 'user'
+      || event.subject.userId !== current.userId
+      || Date.parse(event.recordedAt) !== now) return false;
+    if (this.failAuditInsert) throw new Error('simulated rotation audit insert failed');
+    this.auditOutbox.set(event.eventId, structuredClone(event));
     this.rows.delete(oldHash);
     this.rows.set(replacement.tokenHash, structuredClone(replacement));
     this.rotations++;
@@ -430,4 +446,122 @@ test('conflito na versão da sessão não grava evento de revogação global', a
     { ok: false, error: 'conflict' });
   assert.equal(ctx.store.auditOutbox.size, 0);
   assert.equal(ctx.store.operations.size, 0);
+});
+
+
+test('emissão de sessão gera evento auditável sem credenciais ou hashes', async () => {
+  const ctx = context();
+  const issued = await issue(ctx);
+  assert.equal(ctx.store.auditOutbox.size, 1);
+  assert.equal(ctx.store.rows.size, 1);
+  const event = [...ctx.store.auditOutbox.values()][0];
+  assert.equal(event?.type, 'session-issued');
+  assert.deepEqual(event?.subject, { kind: 'user', userId: USER });
+  assert.equal(event?.eventId.length, 36);
+  assert.equal(event?.correlationId.length, 36);
+  assert.notEqual(event?.eventId, event?.correlationId);
+  for (const sensitive of [
+    issued.sessionToken, issued.csrfToken,
+    digest(issued.sessionToken), digest(issued.csrfToken),
+  ]) {
+    assert.equal(JSON.stringify(event).includes(sensitive), false);
+  }
+});
+
+test('duas sessões emitidas criam eventos diferentes, um por inserção', async () => {
+  const ctx = context();
+  await issue(ctx);
+  await issue(ctx);
+  assert.equal(ctx.store.creates, 2);
+  assert.equal(ctx.store.rows.size, 2);
+  assert.equal(ctx.store.auditOutbox.size, 2);
+  assert.equal(new Set([...ctx.store.auditOutbox.keys()]).size, 2);
+});
+
+test('falha na outbox durante emissão impede criar sessão e permite tentativa posterior', async () => {
+  const ctx = context();
+  ctx.store.failAuditInsert = true;
+  await assert.rejects(ctx.lifecycle.issue(login), /session audit insert failed/);
+  assert.equal(ctx.store.rows.size, 0);
+  assert.equal(ctx.store.auditOutbox.size, 0);
+  assert.equal(ctx.store.creates, 0);
+  ctx.store.failAuditInsert = false;
+  assert.equal((await ctx.lifecycle.issue(login)).ok, true);
+  assert.equal(ctx.store.auditOutbox.size, 1);
+});
+
+test('conta desabilitada no CAS não cria evento de emissão órfão', async () => {
+  const ctx = context();
+  ctx.store.beforeCreate = () => {
+    if (ctx.store.user) ctx.store.user = { ...ctx.store.user, enabled: false };
+  };
+  assert.deepEqual(await ctx.lifecycle.issue(login), { ok: false, error: 'rejected' });
+  assert.equal(ctx.store.rows.size, 0);
+  assert.equal(ctx.store.auditOutbox.size, 0);
+});
+
+test('rotação só confirma após salvar o evento, sem expor tokens no histórico', async () => {
+  const ctx = context();
+  const old = await issue(ctx);
+  const result = await ctx.lifecycle.rotate(credentials(old));
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(ctx.store.auditOutbox.size, 2);
+  const events = [...ctx.store.auditOutbox.values()];
+  assert.deepEqual(events.map(event => event.type), ['session-issued', 'session-rotated']);
+  assert.deepEqual(events[1]?.subject, { kind: 'user', userId: USER });
+  for (const value of [
+    old.sessionToken, old.csrfToken,
+    result.credentials.sessionToken, result.credentials.csrfToken,
+    digest(old.sessionToken), digest(result.credentials.sessionToken),
+  ]) {
+    assert.equal(JSON.stringify(events).includes(value), false);
+  }
+});
+
+test('falha da auditoria durante rotação mantém token antigo e CSRF utilizáveis', async () => {
+  const ctx = context();
+  const first = await issue(ctx);
+  const before = [...ctx.store.rows.values()][0];
+  ctx.store.failAuditInsert = true;
+  await assert.rejects(ctx.lifecycle.rotate(credentials(first)), /rotation audit insert failed/);
+  assert.equal(ctx.store.rotations, 0);
+  assert.equal(ctx.store.auditOutbox.size, 1);
+  assert.deepEqual([...ctx.store.rows.values()][0], before);
+  assert.equal((await ctx.access.authorize('create-draft', credentials(first))).ok, true);
+  ctx.store.failAuditInsert = false;
+  assert.equal((await ctx.lifecycle.rotate(credentials(first))).ok, true);
+  assert.equal(ctx.store.auditOutbox.size, 2);
+});
+
+test('duas rotações simultâneas não geram dois eventos de renovação', async () => {
+  const ctx = context();
+  const first = await issue(ctx);
+  const [a, b] = await Promise.all([
+    ctx.lifecycle.rotate(credentials(first)),
+    ctx.lifecycle.rotate(credentials(first)),
+  ]);
+  assert.equal([a, b].filter(x => x.ok).length, 1);
+  assert.equal(ctx.store.rotations, 1);
+  assert.equal([...ctx.store.auditOutbox.values()].filter(x => x.type === 'session-rotated').length, 1);
+});
+
+test('token CSRF incorreto não escreve evento nem rotaciona credenciais', async () => {
+  const ctx = context();
+  const first = await issue(ctx);
+  const before = ctx.store.auditOutbox.size;
+  assert.deepEqual(await ctx.lifecycle.rotate({
+    sessionToken: first.sessionToken,
+    csrfHeader: Buffer.alloc(32, 4).toString('base64url'),
+    requestOrigin: ORIGIN,
+  }), { ok: false, error: 'csrf-rejected' });
+  assert.equal(ctx.store.auditOutbox.size, before);
+  assert.equal(ctx.store.rotations, 0);
+});
+
+test('relógio além do intervalo Date não emite sessão nem auditoria', async () => {
+  const ctx = context(new FakeStore(), { now: 8_640_000_000_000_000 });
+  assert.deepEqual(await ctx.lifecycle.issue(login), { ok: false, error: 'rejected' });
+  assert.equal(ctx.store.creates, 0);
+  assert.equal(ctx.store.auditOutbox.size, 0);
 });

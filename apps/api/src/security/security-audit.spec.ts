@@ -52,7 +52,7 @@ test('eventos anônimos e de usuário têm taxonomia estrita', () => {
     assert.equal(buildSecurityAuditEvent({ ...user, type: kind }, EVENT_ID, AT), null);
   }
   for (const kind of [
-    'login-approved', 'password-reset-completed', 'session-revoked', 'sessions-revoked-all',
+    'login-approved', 'session-issued', 'session-rotated', 'password-reset-completed', 'session-revoked', 'sessions-revoked-all',
   ]) {
     assert.notEqual(buildSecurityAuditEvent({ ...user, type: kind }, EVENT_ID, AT), null);
     assert.equal(buildSecurityAuditEvent({ ...anon, type: kind }, EVENT_ID, AT), null);
@@ -141,3 +141,12 @@ test('relógio malformado não dispara gravação', async () => {
   assert.equal(writer.events.length, 0);
 });
 
+
+test('emissão e rotação de sessão exigem sujeito usuário válido', () => {
+  for (const type of ['session-issued', 'session-rotated']) {
+    assert.equal(buildSecurityAuditEvent({ ...anon, type }, EVENT_ID, AT), null);
+    const event = buildSecurityAuditEvent({ ...user, type }, EVENT_ID, AT);
+    assert.equal(event?.type, type);
+    assert.deepEqual(event?.subject, { kind: 'user', userId: USER_ID });
+  }
+});

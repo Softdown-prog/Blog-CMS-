@@ -18,7 +18,7 @@ NÃO há integração com Nest Guards, banco, serviços de e-mail, Angular, VPS 
 - Checagem de reutilização de senha, parâmetros Argon2id e bloqueio por corpus grande ainda exigem projeto e testes.
 
 ## Auditoria de segurança
-Eventos permitidos: login-approved, login-rejected, login-throttled, password-reset-requested,
+Eventos permitidos: login-approved, session-issued, session-rotated, login-rejected, login-throttled, password-reset-requested,
 password-reset-rejected, password-reset-completed, session-revoked, sessions-revoked-all.
 Cada registro tem schemaVersion, eventId UUID, correlationId UUID, tipo, sujeito e instante ISO UTC canônico.
 Eventos de usuário aceitam apenas `{kind:user,userId:<UUID>}`.

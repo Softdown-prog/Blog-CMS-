@@ -1,5 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { CommitAuditedSessionMutation } from './audit-outbox';
+import { buildSecurityAuditEvent } from './security-audit';
+import type { SecurityAuditEvent } from './security-audit';
 import type { AtomicSecurityMutationPort } from './audit-outbox';
 import {
   AdminCredentialInput, AdminSessionAccess, AdminSessionReader,
@@ -41,20 +43,26 @@ export interface SessionLifecycleStore extends AdminSessionReader, AtomicSecurit
   /**
    * Insert a session iff user is enabled and authVersion still matches.
    * The token hash must be unique. Never store plaintext secrets.
+   * In the SAME COMMIT insert a validated, immutable 'session-issued'
+   * event into audit outbox. Any outbox failure must abort issuance.
    */
-  createIfUserCurrent(
+  createWithAudit(
     record: AdminSessionRecord,
+    event: SecurityAuditEvent,
   ): Promise<'created' | 'rejected'>;
 
   /**
    * CAS on old token hash, old authVersion and active status, including checks
    * for absolute/idle expiration and CURRENT user enabled/authVersion in the
-   * same atomic transaction. Replace tokenHash AND csrfHash together.
+   * same atomic transaction. Replace tokenHash AND csrfHash together
+   * AND persist the 'session-rotated' event in the same COMMIT; rollback all
+   * on outbox failure. The old session must not survive a successful rotation.
    */
-  rotateIfCurrent(
+  rotateWithAudit(
     oldTokenHash: string,
     replacement: AdminSessionRecord,
     nowMs: number,
+    event: SecurityAuditEvent,
   ): Promise<boolean>;
 
 }
@@ -89,7 +97,8 @@ function tokenIsCanonical(value: unknown): value is string {
 }
 
 function validNow(now: number): boolean {
-  return Number.isSafeInteger(now) && now >= 0 && now + ABSOLUTE_MS < Number.MAX_SAFE_INTEGER;
+  return Number.isSafeInteger(now) && now >= 0
+    && now + ABSOLUTE_MS < 8_640_000_000_000_000;
 }
 
 function newSecrets(secrets: SessionSecretSource): { sessionToken: string; csrfToken: string } {
@@ -132,6 +141,25 @@ export class SessionLifecycle {
     );
   }
 
+  /**
+   * Generates a whitelist-only audit event from verified server data.
+   * IDs are minted internally; no browser-supplied id or session token is
+   * ever copied into audit history.
+   */
+  private newSessionEvent(
+    type: 'session-issued' | 'session-rotated',
+    userId: string,
+    nowMs: number,
+  ): SecurityAuditEvent {
+    const event = buildSecurityAuditEvent({
+      type,
+      subject: { kind: 'user', userId },
+      correlationId: randomUUID(),
+    }, randomUUID(), new Date(nowMs).toISOString());
+    if (event === null) throw new Error('Cannot build trusted session audit event');
+    return event;
+  }
+
   async issue(login: VerifiedLogin): Promise<SessionIssueResult> {
     const now = this.clockMs();
     if (!validNow(now) || !validVerifiedLogin(login, now)) {
@@ -155,7 +183,8 @@ export class SessionLifecycle {
       revokedAtMs: null,
     };
     // Race after findUserById must be resolved atomically by the store.
-    const result = await this.store.createIfUserCurrent(record);
+    const event = this.newSessionEvent('session-issued', user.id, now);
+    const result = await this.store.createWithAudit(record, event);
     return result === 'created'
       ? { ok: true, credentials: { ...issued, expiresAtMs } }
       : { ok: false, error: 'rejected' };
@@ -186,7 +215,8 @@ export class SessionLifecycle {
       csrfHash: digest(fresh.csrfToken),
       idleExpiresAtMs: Math.min(prior.expiresAtMs, now + IDLE_MS),
     };
-    const updated = await this.store.rotateIfCurrent(oldHash, next, now);
+    const event = this.newSessionEvent('session-rotated', access.actor.id, now);
+    const updated = await this.store.rotateWithAudit(oldHash, next, now, event);
     return updated
       ? { ok: true, credentials: { ...fresh, expiresAtMs: prior.expiresAtMs } }
       : { ok: false, error: 'conflict' };

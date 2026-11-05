@@ -10,8 +10,9 @@ issue() só poderá ser chamado pelo verificador futuro que JÁ comprovou senha 
 fatores exigidos. VerifiedLogin é uma entrada interna CONFIÁVEL, NÃO um DTO de cliente.
 Uma chamada HTTP que aceite VerifiedLogin arbitrário daria acesso indevido.
 A prova expira em cinco minutos e é conferida contra usuário ativo e authVersion.
-A inserção no banco deverá também comparar enabled e authVersion na mesma transação
-para eliminar corrida entre a verificação de credenciais e a emissão.
+A porta `createWithAudit` deverá inserir a sessão e um evento `session-issued`
+na outbox na MESMA transação, verificando `enabled` e `authVersion` atuais.
+Se a auditoria falhar, nenhuma sessão pode ser emitida.
 O gerador padrão CryptographicSessionSecrets usa randomBytes(32) do Node.
 Sessão e CSRF recebem tokens distintos de 256 bits e base64url canônico.
 Somente digests SHA-256 são entregues ao armazenamento; valores originais
@@ -21,9 +22,10 @@ retornam apenas à fronteira segura de resposta para cookie/CSRF, nunca aos logs
 rotate() exige sessão válida, Origin exata e token CSRF correto.
 Rotação substitui session token e CSRF de modo indivisível, invalida o anterior
 e preserva a expiração absoluta de 8 horas. O limite de inatividade é de 30 minutos.
-A porta rotateIfCurrent faz compare-and-swap no hash anterior, authVersion
-atual, usuário ativo, prazo e estado de revogação. Duas rotações concorrentes
-não podem ser aceitas ambas. Não renovar sessão expirou ou foi revogada.
+A porta `rotateWithAudit` faz compare-and-swap no hash anterior, `authVersion`
+atual, usuário ativo, prazo e revogação. Também grava `session-rotated` na
+outbox no mesmo COMMIT, ou desfaz toda a rotação. Duas rotações concorrentes
+não podem ser aceitas ambas; não renovar sessão expirada ou revogada.
 
 ## Logout
 logout() valida sessão, CSRF e Origin; então chama o contrato auditado
@@ -42,8 +44,8 @@ a operação a outro usuário por parâmetro recebido do cliente.
 
 ## Contrato do adaptador persistente futuro
 SessionLifecycleStore estende AdminSessionReader:
-- createIfUserCurrent: inserir somente se usuário ativo e versão atual;
-- rotateIfCurrent: validar sessão e usuário no mesmo commit que troca os dois hashes;
+- createWithAudit: inserir somente se usuário ativo e versão atual, com evento de emissão na mesma transação;
+- rotateWithAudit: validar sessão e usuário, trocar token e CSRF e inserir evento de rotação no mesmo COMMIT;
 - applyWithAudit: CAS da sessão/usuário, alteração de estado, idempotência
   e INSERT do evento na outbox no mesmo COMMIT (sem perder auditoria);
 - findSessionByHash e findUserById: carregar estado atual, sem cache de permissões.
@@ -72,8 +74,19 @@ O contrato `VerifyPasswordLogin` agora pode produzir uma prova interna `Verified
 
 `SessionLifecycle` agora exige que o MESMO `SessionLifecycleStore` implemente
 `AtomicSecurityMutationPort`: logout e revogação global obrigatoriamente passam
-por `CommitAuditedSessionMutation`, não por persistência direta. Operação e correlação
+por `CommitAuditedSessionMutation`. Emissão e rotação exigem `createWithAudit` e
+`rotateWithAudit`, sem portas de escrita que ignorem o registro de auditoria. Operação e correlação
 recebem UUIDs novos do servidor; a repetição idempotente com um ID estável é
 suportada pela porta auditada, mas ainda não é propagada por uma camada HTTP.
 O adaptador SQL real, a autenticação HTTP, a transação e o consumer da outbox
 continuam pendentes. Ver [AUDIT_OUTBOX_ARCHITECTURE.md](AUDIT_OUTBOX_ARCHITECTURE.md).
+
+## Integridade de eventos de emissão e rotação
+
+Os eventos `session-issued` e `session-rotated` são construídos no serviço
+interno a partir do usuário autenticado e UUIDs criptográficos; nunca recebem
+o token de sessão, o token CSRF ou seus hashes. Testes de portas simuladas
+verificam rollback lógico e concorrência, sem substituir isolamento SQL.
+Se houver confirmação ambígua de COMMIT, reemitir automaticamente outro token
+não é seguro: a futura integração precisa de protocolo de idempotência de
+emissão/rotação e estratégia de entrega de credenciais sem duplicação.

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 export type SecurityEventType =
   | 'login-approved'
+  | 'session-issued'
+  | 'session-rotated'
   | 'login-rejected'
   | 'login-throttled'
   | 'password-reset-requested'
@@ -37,7 +39,7 @@ export interface SecurityAuditWriter {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY = /^[0-9a-f]{64}$/;
 const USER_EVENTS: readonly SecurityEventType[] = [
-  'login-approved', 'password-reset-completed',
+  'login-approved', 'session-issued', 'session-rotated', 'password-reset-completed',
   'session-revoked', 'sessions-revoked-all',
 ];
 const ANONYMOUS_EVENTS: readonly SecurityEventType[] = [

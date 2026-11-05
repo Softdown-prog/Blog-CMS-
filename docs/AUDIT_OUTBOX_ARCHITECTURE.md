@@ -87,3 +87,15 @@ Esses testes NÃO executam transações reais, nem provam isolamento PostgreSQL.
 `RecordSecurityAudit` continua útil para contratos simples e não garante
 atomicidade com mudanças de estado. Não usá-lo isoladamente para confirmar
 mutações de segurança críticas.
+
+## Emissão e rotação de sessões (fase offline)
+
+`SessionLifecycleStore` agora exige `createWithAudit` e `rotateWithAudit`.
+A criação grava `session-issued`, e a rotação grava `session-rotated`, com
+UUID exclusivo e sujeito usuário. A transação futura deve vincular a escrita
+na outbox ao INSERT da sessão ou ao CAS do token e CSRF, respectivamente.
+Falha do INSERT de auditoria => ROLLBACK da sessão/crendenciais.
+Nenhum token, hash de sessão, senha ou CSRF entra no registro de eventos.
+Essas operações ainda não compartilham o protocolo de replay da revogação:
+antes da integração final, projetar recuperação de confirmações de COMMIT
+ambíguas sem enviar duas credenciais diferentes para uma mesma operação.
