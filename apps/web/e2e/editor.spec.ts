@@ -114,7 +114,7 @@ test('categoria e marcadores aparecem na prévia e são removíveis', async ({ p
   await page.getByTestId('add-tag').click();
   await page.getByTestId('tag-entry').fill('Café');
   await page.getByTestId('add-tag').click();
-  await expect(page.getByTestId('tag-item')).toHaveText(['Angular Remover', 'Café Remover']);
+  await expect(page.getByTestId('tag-item').locator('span')).toHaveText(['Angular', 'Café']);
   await expect(page.getByTestId('preview-tags').locator('li')).toHaveText(['Angular', 'Café']);
   await page.getByRole('button', { name: 'Remover marcador Angular' }).click();
   await expect(page.getByTestId('preview-tags').locator('li')).toHaveText(['Café']);
