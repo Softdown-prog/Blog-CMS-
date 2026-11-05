@@ -78,3 +78,34 @@ XSS, upload malicioso, links inseguros, cache e acessibilidade.
 
 Não houve migração de banco, login HTTP, integração com o WordPress/Blogger,
 serviço de SEO, hospedagem, PR, merge ou deploy.
+
+## Fase 2A — bancada editorial Angular (implementada na branch)
+
+A rota já existente `/admin` continua sendo uma **demonstração pública sem
+autenticação e SEM persistência**. O componente
+`apps/web/src/app/admin-preview.component.ts` foi transformado em uma
+bancada de escrita local com template e CSS separados.
+
+- Campos editáveis: título, endereço (slug) e resumo;
+- Blocos locais: subtítulo H2/H3, parágrafo, lista e citação, com adição/remoção;
+- Sugestões explícitas de slug e resumo; aplicar sugestão só altera o signal;
+- Painel lateral com contagem de palavras, minutos, imagens, avisos e outline;
+- Prévia com opções celular/desktop e **interpolação escapada**, jamais innerHTML;
+- Android/mobile-first: CSS responsivo, controles touch-friendly e labels;
+- Estado exclusivo em signals Angular; recarregar a página elimina os dados;
+- Modo de escrita demonstrativo **não possui salvar/publicar/logout/upload**.
+
+`apps/api/src/editorial/editor-workbench.ts` é um pequeno adaptador puro de
+blocos de UI para o mesmo documento JSON v1 validado pelo domínio;
+o Angular **reutiliza o código puro de `apps/api/src/editorial`**, sem
+copiar regras. Se esse vínculo de diretórios começar a criar dependência
+de infraestrutura, extrair somente o domínio puro para pacote workspace
+compartilhado (não antecipar uma migração maior agora).
+
+A compilação Angular AOT/SAC e os testes unitários do domínio precisam passar.
+Testes reais de interação no Chromium/Playwright, teclado e Android,
+persistência autenticada e revisão de acessibilidade permanecem pendentes.
+
+**Escopo futuro ainda não realizado:** upload de mídias, tags, categorias,
+editor completo com seleções/rich text, salvamento, autenticação HTTP,
+e publicação em banco.

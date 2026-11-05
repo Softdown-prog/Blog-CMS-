@@ -74,3 +74,13 @@ e avisos sobre título, resumo, conteúdo e alt de imagens. Reusa
 `parseEditorialDocument` — não converte texto em HTML, não grava campos,
 não conhece o usuário, não roda no Angular ainda e não é regra de autorização.
 Ver [PUBLISHING_TOOLS_ROADMAP.md](PUBLISHING_TOOLS_ROADMAP.md).
+
+## Assistente de publicação e bancada de edição
+
+`publication-tools.ts` fornece avisos e métricas de publicação;
+`editor-workbench.ts` converte os blocos locais do Angular em
+`EditorialDocumentV1`, com limites canônicos. A prévia do Angular usa
+interpolação de texto, não HTML arbitrário. Veja
+[PUBLISHING_TOOLS_ROADMAP.md](PUBLISHING_TOOLS_ROADMAP.md).
+A bancada é uma demonstração exclusivamente em memória e nunca toca o
+PostgreSQL nem comandos de publicação.

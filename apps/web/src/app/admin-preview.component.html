@@ -1,0 +1,178 @@
+<section class="container workbench">
+  <p class="eyebrow">CMS · LABORATÓRIO EDITORIAL</p>
+  <h1>Ferramentas de publicação</h1>
+  <p class="intro">Edite os blocos, confira a prévia e receba sugestões antes de publicar.</p>
+  <p class="offline-note" role="status" data-testid="workbench-offline">
+    Demonstração local: nada é salvo, enviado ao servidor ou publicado. Ao recarregar a página, o texto será perdido.
+  </p>
+
+  <div class="workbench-layout">
+    <section class="panel editor-panel" aria-labelledby="editor-title">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">RASCUNHO LOCAL</p>
+          <h2 id="editor-title">Escrever artigo</h2>
+        </div>
+        <span class="state-tag">Não salvo</span>
+      </div>
+
+      <div class="field">
+        <label for="workbench-title">Título do artigo</label>
+        <input id="workbench-title" data-testid="editor-title" #titleInput
+          [value]="title()" maxlength="240" (input)="title.set(titleInput.value)"
+          autocomplete="off" />
+      </div>
+
+      <div class="field">
+        <div class="field-label">
+          <label for="workbench-slug">Endereço da publicação</label>
+          @if (review().suggestedSlug && review().suggestedSlug !== slug()) {
+            <button type="button" class="inline-action" data-testid="apply-slug"
+              (click)="applySuggestedSlug()">Usar sugestão</button>
+          }
+        </div>
+        <input id="workbench-slug" data-testid="editor-slug" #slugInput
+          [value]="slug()" maxlength="100" (input)="slug.set(slugInput.value)"
+          autocomplete="off" spellcheck="false"/>
+        @if (review().suggestedSlug && review().suggestedSlug !== slug()) {
+          <small class="hint">Sugestão: {{ review().suggestedSlug }}</small>
+        }
+      </div>
+
+      <div class="field">
+        <div class="field-label">
+          <label for="workbench-excerpt">Resumo</label>
+          @if (review().suggestedExcerpt && review().suggestedExcerpt !== excerpt()) {
+            <button type="button" class="inline-action" data-testid="apply-excerpt"
+              (click)="applySuggestedExcerpt()">Usar sugestão</button>
+          }
+        </div>
+        <textarea id="workbench-excerpt" data-testid="editor-excerpt"
+          #excerptInput [value]="excerpt()" maxlength="500" rows="3"
+          (input)="excerpt.set(excerptInput.value)"></textarea>
+      </div>
+
+      <h3 class="block-heading">Blocos do artigo</h3>
+      <div class="editor-blocks">
+        @for (block of blocks(); track block.id) {
+          <fieldset class="edit-block" [attr.data-testid]="'editor-block-' + block.id">
+            <legend>{{ blockName(block.kind) }} {{ $index + 1 }}</legend>
+            @if (block.kind === 'heading') {
+              <label class="sr-only" [for]="'heading-level-' + block.id">Nível do subtítulo</label>
+              <select [id]="'heading-level-' + block.id" #headingLevel
+                [value]="block.level" (change)="changeHeadingLevel(block.id, headingLevel.value)">
+                <option value="2">Título H2</option>
+                <option value="3">Título H3</option>
+              </select>
+            }
+            <label class="sr-only" [for]="'block-text-' + block.id">Conteúdo do bloco {{ $index + 1 }}</label>
+            <textarea [id]="'block-text-' + block.id" #blockText
+              [value]="block.text" [attr.maxlength]="blockLength(block.kind)"
+              [attr.aria-label]="blockName(block.kind)"
+              [rows]="block.kind === 'paragraph' ? 6 : 3"
+              (input)="changeBlock(block.id, blockText.value)"></textarea>
+            @if (block.kind === 'list') {
+              <small class="hint">Uma linha por item. Máximo de 40 itens.</small>
+            }
+            <button type="button" class="remove-action"
+              (click)="removeBlock(block.id)"
+              [attr.aria-label]="'Remover bloco ' + ($index + 1)">Remover bloco</button>
+          </fieldset>
+        }
+      </div>
+      <div class="block-actions" role="group" aria-label="Adicionar bloco ao artigo">
+        <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('paragraph')">+ Parágrafo</button>
+        <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('heading')">+ Subtítulo</button>
+        <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('list')">+ Lista</button>
+        <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('quote')">+ Citação</button>
+      </div>
+      <p class="hint">O envio e o salvamento serão habilitados apenas depois da autenticação e dos testes de integração.</p>
+    </section>
+
+    <aside class="inspector" aria-label="Ferramentas e pré-visualização">
+      <section class="panel metrics" aria-labelledby="metrics-title">
+        <h2 id="metrics-title">Análise do texto</h2>
+        <div class="metrics-row" aria-live="polite">
+          <div><strong data-testid="word-count">{{ review().wordCount }}</strong><span>Palavras</span></div>
+          <div><strong data-testid="reading-minutes">{{ review().readingMinutes }} min</strong><span>Leitura</span></div>
+          <div><strong data-testid="image-count">{{ review().imageCount }}</strong><span>Imagens</span></div>
+        </div>
+        <h3>Observações</h3>
+        @if (review().notices.length === 0) {
+          <p data-testid="no-notices">Nenhuma sugestão nesta versão.</p>
+        } @else {
+          <ul class="notices" data-testid="editor-notices">
+            @for (notice of review().notices; track $index) {
+              <li [class.notice-error]="notice.level === 'error'">
+                {{ noticeText(notice.code) }}
+                @if (notice.blockIndex !== null) {
+                  <span>(bloco {{ notice.blockIndex + 1 }})</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+        @if (review().outline.length > 0) {
+          <h3>Estrutura do artigo</h3>
+          <ol class="outline">
+            @for (heading of review().outline; track heading.blockIndex) {
+              <li>H{{ heading.level }} · {{ heading.text }}</li>
+            }
+          </ol>
+        }
+      </section>
+
+      <section class="panel" aria-labelledby="preview-title">
+        <div class="panel-head">
+          <h2 id="preview-title">Pré-visualização</h2>
+          <button type="button" class="inline-action" data-testid="toggle-preview"
+            [attr.aria-expanded]="showPreview()"
+            (click)="showPreview.set(!showPreview())">{{ showPreview() ? 'Ocultar' : 'Exibir' }}</button>
+        </div>
+        @if (showPreview()) {
+          <div class="size-controls" role="group" aria-label="Largura da pré-visualização">
+            <button type="button" [class.selected]="previewSize() === 'mobile'"
+              [attr.aria-pressed]="previewSize() === 'mobile'"
+              (click)="previewSize.set('mobile')">Celular</button>
+            <button type="button" [class.selected]="previewSize() === 'desktop'"
+              [attr.aria-pressed]="previewSize() === 'desktop'"
+              (click)="previewSize.set('desktop')">Desktop</button>
+          </div>
+          <article class="post-preview" data-testid="post-preview"
+            [class.preview-mobile]="previewSize() === 'mobile'">
+            <p class="preview-eyebrow">PRÉVIA NÃO PUBLICADA</p>
+            <h3>{{ title() || 'Título do artigo' }}</h3>
+            @if (excerpt().trim()) { <p class="preview-excerpt">{{ excerpt() }}</p> }
+            @for (block of blocks(); track block.id) {
+              @switch (block.kind) {
+                @case ('heading') {
+                  @if (block.level === 2) { <h4>{{ block.text }}</h4> }
+                  @else { <h5>{{ block.text }}</h5> }
+                }
+                @case ('paragraph') { <p>{{ block.text }}</p> }
+                @case ('quote') { <blockquote>{{ block.text }}</blockquote> }
+                @case ('list') {
+                  <ul>
+                    @for (item of listItems(block.text); track $index) { <li>{{ item }}</li> }
+                  </ul>
+                }
+              }
+            }
+          </article>
+        }
+        <p class="hint">O conteúdo é mostrado como texto seguro, sem executar HTML fornecido pelo autor.</p>
+      </section>
+
+      <section class="panel">
+        <button type="button" class="inline-action" data-testid="admin-help"
+          [attr.aria-expanded]="showHelp()" (click)="showHelp.set(!showHelp())">
+          {{ showHelp() ? 'Ocultar orientações' : 'Orientações do painel' }}
+        </button>
+        @if (showHelp()) {
+          <p data-testid="admin-help-text">Esta tela é apenas um laboratório. Não existe login, upload ou publicação ativos aqui.</p>
+        }
+      </section>
+    </aside>
+  </div>
+</section>
+
