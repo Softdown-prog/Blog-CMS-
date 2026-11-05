@@ -55,10 +55,10 @@ test('integração editorial com PostgreSQL 18 descartável', async (t) => {
     const db = await pool.query<{ version: string }>('SHOW server_version');
     assert.ok(db.rows[0]?.version.startsWith('18.'));
     await pool.query(
-      \`INSERT INTO cms_users (id,email,password_hash,role)
+      `INSERT INTO cms_users (id,email,password_hash,role)
        VALUES ($1::uuid, 'author@test.invalid', 'not-a-real-password', 'author'),
               ($2::uuid, 'editor@test.invalid', 'not-a-real-password', 'editor'),
-              ($3::uuid, 'other@test.invalid', 'not-a-real-password', 'author')\`,
+              ($3::uuid, 'other@test.invalid', 'not-a-real-password', 'author')`,
       [AUTHOR_ID, EDITOR_ID, OTHER_ID],
     );
   });
@@ -76,8 +76,8 @@ test('integração editorial com PostgreSQL 18 descartável', async (t) => {
     assert.deepEqual(stored?.body, doc);
     assert.equal(stored?.revision, 0);
     const revisions = await pool.query<{ count: string; author: string }>(
-      \`SELECT count(*)::text AS count, min(editor_id::text) AS author
-       FROM cms_post_revisions WHERE post_id=$1::uuid\`, [POST_ID],
+      `SELECT count(*)::text AS count, min(editor_id::text) AS author
+       FROM cms_post_revisions WHERE post_id=$1::uuid`, [POST_ID],
     );
     assert.equal(revisions.rows[0]?.count, '1');
     assert.equal(revisions.rows[0]?.author, AUTHOR_ID);
@@ -126,8 +126,8 @@ test('integração editorial com PostgreSQL 18 descartável', async (t) => {
     const initial = await repo.findById(POST_ID);
     assert.ok(initial);
     await pool.query(
-      \`ALTER TABLE cms_post_revisions ADD CONSTRAINT ci_fail_revision
-       CHECK (snapshot->>'title' <> 'ROLLBACK-TEST')\`,
+      `ALTER TABLE cms_post_revisions ADD CONSTRAINT ci_fail_revision
+       CHECK (snapshot->>'title' <> 'ROLLBACK-TEST')`,
     );
     try {
       await assert.rejects(make(POST_ID).saveDraft(editor, {
@@ -161,9 +161,9 @@ test('integração editorial com PostgreSQL 18 descartável', async (t) => {
     const origin = await pool.query<{
       revision: string; editor_id: string; origin_kind: string; snapshot: unknown;
     }>(
-      \`SELECT revision::text, editor_id::text, origin_kind, snapshot
+      `SELECT revision::text, editor_id::text, origin_kind, snapshot
          FROM cms_post_revisions WHERE post_id=$1::uuid
-         ORDER BY revision DESC LIMIT 1\`, [POST_ID],
+         ORDER BY revision DESC LIMIT 1`, [POST_ID],
     );
     assert.equal(origin.rows[0]?.revision, '2');
     assert.equal(origin.rows[0]?.editor_id, EDITOR_ID);
@@ -185,8 +185,8 @@ test('integração editorial com PostgreSQL 18 descartável', async (t) => {
 
   await t.test('constraint PostgreSQL bloqueia estado publicado sem data real', async () => {
     await assert.rejects(pool.query(
-      \`UPDATE cms_posts SET published_at=NULL
-       WHERE id=$1::uuid\`, [POST_ID],
+      `UPDATE cms_posts SET published_at=NULL
+       WHERE id=$1::uuid`, [POST_ID],
     ));
     assert.ok((await repo.findById(POST_ID))?.publishedAt);
   });
@@ -201,10 +201,10 @@ test('integração editorial com PostgreSQL 18 descartável', async (t) => {
     assert.equal(results.filter(r => r.ok).length, 1);
     assert.equal(results.filter(r => !r.ok && r.error === 'duplicate-slug').length, 1);
     const rows = await pool.query<{ posts: string; revisions: string }>(
-      \`SELECT
+      `SELECT
         (SELECT count(*) FROM cms_posts WHERE slug='mesmo-slug')::text AS posts,
         (SELECT count(*) FROM cms_post_revisions r
-         JOIN cms_posts p ON p.id=r.post_id WHERE p.slug='mesmo-slug')::text AS revisions\`,
+         JOIN cms_posts p ON p.id=r.post_id WHERE p.slug='mesmo-slug')::text AS revisions`,
     );
     assert.deepEqual(rows.rows[0], { posts: '1', revisions: '1' });
   });

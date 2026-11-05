@@ -80,10 +80,10 @@ export class PgEditorialRepository implements EditorialRepository {
     try {
       await client.query('BEGIN');
       await client.query(
-        \`INSERT INTO cms_posts
+        `INSERT INTO cms_posts
           (id, author_id, revision, status, title, slug, excerpt, body,
            scheduled_at, published_at)
-         VALUES ($1::uuid, $2::uuid, 0, 'draft', $3, $4, $5, $6::jsonb, NULL, NULL)\`,
+         VALUES ($1::uuid, $2::uuid, 0, 'draft', $3, $4, $5, $6::jsonb, NULL, NULL)`,
         [post.id, post.authorId, post.title, post.slug, post.excerpt, JSON.stringify(body)],
       );
       await this.insertRevision(client, { ...post, body }, post.authorId);
@@ -110,13 +110,13 @@ export class PgEditorialRepository implements EditorialRepository {
     try {
       await client.query('BEGIN');
       const update = await client.query(
-        \`UPDATE cms_posts
+        `UPDATE cms_posts
          SET title=$4, slug=$5, excerpt=$6, body=$7::jsonb,
              status=$8, scheduled_at=$9::timestamptz,
              published_at=$10::timestamptz,
              revision=$11::bigint, updated_at=NOW()
          WHERE id=$1::uuid AND revision=$2::bigint AND author_id=$3::uuid
-         RETURNING id\`,
+         RETURNING id`,
         [
           next.id, expectedRevision, next.authorId, next.title, next.slug,
           next.excerpt, JSON.stringify(body), next.status,
@@ -143,10 +143,10 @@ export class PgEditorialRepository implements EditorialRepository {
     client: PoolClient, post: EditorialPost, editorId: string,
   ): Promise<void> {
     await client.query(
-      \`INSERT INTO cms_post_revisions
+      `INSERT INTO cms_post_revisions
          (id, post_id, editor_id, snapshot, revision, origin_kind, system_key)
        VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::jsonb,
-               $4::bigint, 'user', NULL)\`,
+               $4::bigint, 'user', NULL)`,
       [post.id, editorId, JSON.stringify(post), post.revision],
     );
   }
