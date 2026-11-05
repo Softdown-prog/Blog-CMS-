@@ -130,3 +130,22 @@ Pendências após esta etapa: checagem em Android físico, acessibilidade com
 leitor de tela, múltiplos tamanhos intermediários, atalhos de teclado,
 persistence/auth HTTP, upload de mídia e banco. Não presumir que compilar e
 passar no Playwright garantam prontidão para produção.
+ 
+## Fase 2C — taxonomia e marcadores em memória
+
+O contrato isolado `apps/api/src/editorial/publication-taxonomy.ts`
+representa **uma categoria opcional** e **até 12 tags** em nomes legíveis.
+Inclui normalização Unicode, limites, campos exatos, deduplicação por
+acentos/maiúsculas, rejeição de controles e delimitadores de HTML e erros
+tipados. Não altera `EditorialPost` nem `EditorialDocumentV1`.
+
+A bancada Angular agora oferece escolha de categoria demonstrativa,
+adição/remoção de marcadores, avisos de duplicidade e exibição na prévia.
+Os valores são guardados apenas em signals e apagados ao recarregar.
+Os testes Playwright continuam em Chromium desktop e Pixel 5 emulado.
+
+**Não há categorias reais no banco, relação com posts, permalinks únicos,
+autenticação ou endpoints.** Antes de persistir, definir tabela normalizada
+de termos, aliases/slugs, relações post-termo e autorização/RBAC com
+compare-and-swap de revisão. Nunca confiar apenas na lista de categorias
+da interface.

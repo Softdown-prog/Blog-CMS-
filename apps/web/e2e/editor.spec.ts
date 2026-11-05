@@ -106,3 +106,51 @@ test('a bancada não ultrapassa horizontalmente a viewport', async ({ page }) =>
   }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.viewportWidth + 1);
 });
+
+test('categoria e marcadores aparecem na prévia e são removíveis', async ({ page }) => {
+  await page.getByTestId('category-choice').selectOption('Tutoriais');
+  await expect(page.getByTestId('preview-category')).toHaveText('Categoria: Tutoriais');
+  await page.getByTestId('tag-entry').fill('Angular');
+  await page.getByTestId('add-tag').click();
+  await page.getByTestId('tag-entry').fill('Café');
+  await page.getByTestId('add-tag').click();
+  await expect(page.getByTestId('tag-item')).toHaveText(['Angular Remover', 'Café Remover']);
+  await expect(page.getByTestId('preview-tags').locator('li')).toHaveText(['Angular', 'Café']);
+  await page.getByRole('button', { name: 'Remover marcador Angular' }).click();
+  await expect(page.getByTestId('preview-tags').locator('li')).toHaveText(['Café']);
+  await page.getByTestId('category-choice').selectOption('');
+  await expect(page.getByTestId('preview-category')).toHaveCount(0);
+});
+
+test('marcador duplicado ou com HTML é recusado sem executar conteúdo', async ({ page }) => {
+  await page.getByTestId('tag-entry').fill('Café');
+  await page.getByTestId('add-tag').click();
+  await page.getByTestId('tag-entry').fill('CAFE');
+  await page.getByTestId('add-tag').click();
+  await expect(page.getByTestId('tag-feedback')).toContainText('já foi adicionado');
+  await expect(page.getByTestId('tag-item')).toHaveCount(1);
+  await page.getByTestId('tag-entry').fill('<img src=x onerror=alert(1)>');
+  await page.getByTestId('add-tag').click();
+  await expect(page.getByTestId('tag-feedback')).toContainText('válido');
+  await expect(page.getByTestId('preview-tags').locator('img')).toHaveCount(0);
+  await expect(page.getByTestId('tag-item')).toHaveCount(1);
+});
+
+test('categoria e tags são descartadas após reload e não causam requests', async ({ page }) => {
+  const unexpected: string[] = [];
+  page.on('request', request => {
+    if (request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) {
+      unexpected.push(request.method() + ' ' + request.url());
+    }
+  });
+  await page.getByTestId('category-choice').selectOption('Projetos');
+  await page.getByTestId('tag-entry').fill('C++');
+  await page.getByTestId('add-tag').click();
+  await expect(page.getByTestId('preview-category')).toBeVisible();
+  expect(unexpected).toEqual([]);
+  await page.reload();
+  await expect(page.getByTestId('category-choice')).toHaveValue('');
+  await expect(page.getByTestId('tag-item')).toHaveCount(0);
+  await expect(page.getByTestId('preview-category')).toHaveCount(0);
+});
+

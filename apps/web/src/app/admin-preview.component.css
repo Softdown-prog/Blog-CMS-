@@ -49,4 +49,15 @@ button.remove-action { background: #fff; color: #8a2630; border: 1px solid #deb6
   .workbench .panel { padding: 1rem; }
   .inspector { display: flex; flex-direction: column; }
 }
-
+.taxonomy-panel { margin: 1.4rem 0 1.6rem; padding: 1rem; background: #f6f9fc; border: 1px solid #d8e3ec; border-radius: .7rem; }
+.taxonomy-panel h3 { margin: 0; }
+.tag-entry-row { display: flex; flex-wrap: wrap; gap: .55rem; align-items: stretch; }
+.tag-entry-row input { flex: 1 1 190px; min-width: 0; }
+.tag-list, .preview-tags { display: flex; flex-wrap: wrap; gap: .55rem; list-style: none; padding: 0; margin: .8rem 0 0; }
+.tag-list li, .preview-tags li { display: flex; align-items: center; min-width: 0; overflow-wrap: anywhere; gap: .5rem; padding: .35rem .55rem; border: 1px solid #c4d5e4; border-radius: .5rem; background: #fff; }
+.tag-list li span { min-width: 0; overflow-wrap: anywhere; }
+.workbench .tag-list .remove-action { min-height: 36px; font-size: .78rem; padding: .3rem .5rem; }
+.preview-category { font-size: .85rem; font-weight: 650; color: #315c7b; }
+.preview-tags { margin-bottom: 1rem; }
+.preview-tags li { background: #eaf3f8; color: #265070; font-size: .8rem; }
+.tag-feedback { color: #992633; margin: 0; font-weight: 600; line-height: 1.45; }

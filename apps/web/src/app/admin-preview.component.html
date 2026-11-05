@@ -52,6 +52,50 @@
           (input)="excerpt.set(excerptInput.value)"></textarea>
       </div>
 
+      <section class="taxonomy-panel" aria-labelledby="taxonomy-heading">
+        <h3 id="taxonomy-heading">Organização da publicação</h3>
+        <p class="hint">Categorias e marcadores são locais nesta demonstração. Não são salvos.</p>
+        <div class="field">
+          <label for="category-choice">Categoria (uma por publicação)</label>
+          <select id="category-choice" data-testid="category-choice" #categoryChoice
+            [value]="taxonomy().category ?? ''"
+            (change)="changeCategory(categoryChoice.value)">
+            <option value="">Sem categoria</option>
+            @for (category of categoryOptions; track category) {
+              <option [value]="category">{{ category }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label for="tag-entry">Marcador (tag)</label>
+          <div class="tag-entry-row">
+            <input id="tag-entry" data-testid="tag-entry" #tagEntry
+              maxlength="40" autocomplete="off" [value]="tagDraft()"
+              (input)="tagDraft.set(tagEntry.value)"
+              placeholder="Ex.: Angular, TypeScript, jogos"/>
+            <button type="button" data-testid="add-tag" (click)="addTag()">
+              Adicionar
+            </button>
+          </div>
+          <small class="hint">Até 12 marcadores. Repetidos não são aceitos.</small>
+          @if (tagFeedback()) {
+            <p class="tag-feedback" role="alert" data-testid="tag-feedback">
+              {{ tagFeedback() }}
+            </p>
+          }
+        </div>
+        <ul class="tag-list" data-testid="tag-list" aria-label="Marcadores selecionados">
+          @for (tag of taxonomy().tags; track tag) {
+            <li data-testid="tag-item">
+              <span>{{ tag }}</span>
+              <button type="button" class="remove-action"
+                [attr.aria-label]="'Remover marcador ' + tag"
+                (click)="removeTag($index)">Remover</button>
+            </li>
+          }
+        </ul>
+      </section>
+
       <h3 class="block-heading">Blocos do artigo</h3>
       <div class="editor-blocks">
         @for (block of blocks(); track block.id) {
@@ -141,7 +185,19 @@
           <article class="post-preview" data-testid="post-preview"
             [class.preview-mobile]="previewSize() === 'mobile'">
             <p class="preview-eyebrow">PRÉVIA NÃO PUBLICADA</p>
+            @if (taxonomy().category) {
+              <p class="preview-category" data-testid="preview-category">
+                Categoria: {{ taxonomy().category }}
+              </p>
+            }
             <h3>{{ title() || 'Título do artigo' }}</h3>
+            @if (taxonomy().tags.length > 0) {
+              <ul class="preview-tags" data-testid="preview-tags" aria-label="Marcadores da publicação">
+                @for (tag of taxonomy().tags; track tag) {
+                  <li>{{ tag }}</li>
+                }
+              </ul>
+            }
             @if (excerpt().trim()) { <p class="preview-excerpt">{{ excerpt() }}</p> }
             @for (block of blocks(); track block.id) {
               @switch (block.kind) {
