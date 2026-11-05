@@ -1,4 +1,6 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { CommitAuditedSessionMutation } from './audit-outbox';
+import type { AtomicSecurityMutationPort } from './audit-outbox';
 import {
   AdminCredentialInput, AdminSessionAccess, AdminSessionReader,
   AdminSessionRecord,
@@ -35,7 +37,7 @@ export class CryptographicSessionSecrets implements SessionSecretSource {
  * Future adapter MUST implement all operations atomically. No implementation
  * of this interface is registered with Nest or PostgreSQL at this stage.
  */
-export interface SessionLifecycleStore extends AdminSessionReader {
+export interface SessionLifecycleStore extends AdminSessionReader, AtomicSecurityMutationPort {
   /**
    * Insert a session iff user is enabled and authVersion still matches.
    * The token hash must be unique. Never store plaintext secrets.
@@ -55,22 +57,6 @@ export interface SessionLifecycleStore extends AdminSessionReader {
     nowMs: number,
   ): Promise<boolean>;
 
-  /**
-   * CAS on token hash, current user/version and active status. Persist
-   * revokedAtMs. Never revoke other users' sessions.
-   */
-  revokeIfCurrent(
-    tokenHash: string, userId: string, authVersion: number, nowMs: number,
-  ): Promise<boolean>;
-
-  /**
-   * Atomically verify this exact active session and user and increment the
-   * user's authVersion. This invalidates all existing sessions immediately.
-   * DO NOT use caller-provided user IDs to target a different account.
-   */
-  invalidateAllIfCurrent(
-    tokenHash: string, userId: string, authVersion: number, nowMs: number,
-  ): Promise<boolean>;
 }
 
 export type SessionLifecycleError = 'unauthenticated' | 'forbidden' | 'csrf-rejected' | 'conflict';
@@ -131,12 +117,20 @@ function validVerifiedLogin(login: VerifiedLogin, now: number): boolean {
  * and CSRF/Origin for every mutating operation.
  */
 export class SessionLifecycle {
+  private readonly audited: CommitAuditedSessionMutation;
+
   constructor(
     private readonly store: SessionLifecycleStore,
     private readonly access: AdminSessionAccess,
     private readonly clockMs: () => number,
     private readonly secrets: SessionSecretSource = new CryptographicSessionSecrets(),
-  ) {}
+  ) {
+    // The audited mutation port is the SAME persistence boundary as sessions,
+    // so wiring cannot accidentally target two independent data stores.
+    this.audited = new CommitAuditedSessionMutation(
+      store, () => new Date(clockMs()).toISOString(),
+    );
+  }
 
   async issue(login: VerifiedLogin): Promise<SessionIssueResult> {
     const now = this.clockMs();
@@ -198,34 +192,47 @@ export class SessionLifecycle {
       : { ok: false, error: 'conflict' };
   }
 
-  async logout(input: AdminCredentialInput): Promise<SessionMutationResult> {
-    const access = await this.access.authorize('logout-session', input);
+  /**
+   * No direct mutating store call is allowed here. All security-sensitive
+   * revocations must commit state AND outbox atomically via audited port.
+   * Random IDs are minted by trusted server-side code, never from input.
+   */
+  private async commitRevocation(
+    input: AdminCredentialInput,
+    action: 'logout-session' | 'revoke-all-sessions',
+    kind: 'revoke-session' | 'revoke-all-sessions',
+  ): Promise<SessionMutationResult> {
+    const access = await this.access.authorize(action, input);
     if (!access.ok) return { ok: false, error: access.reason };
-    if (!tokenIsCanonical(input.sessionToken)) return { ok: false, error: 'unauthenticated' };
+    if (!tokenIsCanonical(input.sessionToken)) {
+      return { ok: false, error: 'unauthenticated' };
+    }
+
     const hash = digest(input.sessionToken);
     const prior = await this.store.findSessionByHash(hash);
     if (!prior || prior.userId !== access.actor.id) {
       return { ok: false, error: 'unauthenticated' };
     }
-    const updated = await this.store.revokeIfCurrent(
-      hash, prior.userId, prior.authVersion, this.clockMs(),
-    );
-    return updated ? { ok: true } : { ok: false, error: 'conflict' };
+
+    const result = await this.audited.execute({
+      operationId: randomUUID(),
+      correlationId: randomUUID(),
+      userId: access.actor.id,
+      sessionHash: hash,
+      expectedAuthVersion: prior.authVersion,
+      kind,
+    });
+    // A malformed clock or invalid internal input must never imply success.
+    if (!result.ok) return { ok: false, error: 'conflict' };
+    return { ok: true };
+  }
+
+  async logout(input: AdminCredentialInput): Promise<SessionMutationResult> {
+    return this.commitRevocation(input, 'logout-session', 'revoke-session');
   }
 
   async invalidateAll(input: AdminCredentialInput): Promise<SessionMutationResult> {
-    const access = await this.access.authorize('revoke-all-sessions', input);
-    if (!access.ok) return { ok: false, error: access.reason };
-    if (!tokenIsCanonical(input.sessionToken)) return { ok: false, error: 'unauthenticated' };
-    const hash = digest(input.sessionToken);
-    const prior = await this.store.findSessionByHash(hash);
-    if (!prior || prior.userId !== access.actor.id) {
-      return { ok: false, error: 'unauthenticated' };
-    }
-    const updated = await this.store.invalidateAllIfCurrent(
-      hash, prior.userId, prior.authVersion, this.clockMs(),
-    );
-    return updated ? { ok: true } : { ok: false, error: 'conflict' };
+    return this.commitRevocation(input, 'revoke-all-sessions', 'revoke-all-sessions');
   }
 }
 

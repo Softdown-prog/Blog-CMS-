@@ -24,3 +24,7 @@ Ver [PASSWORD_POLICY_AUDIT.md](PASSWORD_POLICY_AUDIT.md). São contratos isolado
 ## Auditoria transacional pendente de integração
 
 Os contratos de idempotência, outbox e projeção do ledger foram preparados em [AUDIT_OUTBOX_ARCHITECTURE.md](AUDIT_OUTBOX_ARCHITECTURE.md). Não substituir revisão de isolamento transacional em PostgreSQL por testes simulados.
+
+## Logout e revogação global auditados internamente
+
+`SessionLifecycle` agora exige `AtomicSecurityMutationPort` como parte obrigatória do próprio armazenamento de sessão. O commit de alteração+outbox ainda precisa ser comprovado em PostgreSQL descartável na etapa final. Não foi exposto nenhum endpoint ou worker.

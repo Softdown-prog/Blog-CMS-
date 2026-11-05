@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import type { AuditedSessionMutation } from './audit-outbox';
+import type { SecurityAuditEvent } from './security-audit';
 import test from 'node:test';
 import {
   ActiveAdminUser, AdminSessionAccess, AdminSessionRecord,
@@ -32,6 +34,10 @@ class FakeStore implements SessionLifecycleStore {
     id: USER, role: 'author', enabled: true, authVersion: 3,
   };
   readonly rows = new Map<string, AdminSessionRecord>();
+  readonly auditOutbox = new Map<string, SecurityAuditEvent>();
+  readonly operations = new Map<string, string>();
+  failAuditInsert = false;
+  auditedCalls = 0;
   beforeCreate?: () => void;
   beforeRotate?: () => void;
   beforeGlobal?: () => void;
@@ -79,24 +85,37 @@ class FakeStore implements SessionLifecycleStore {
     return true;
   }
 
-  async revokeIfCurrent(oldHash: string, userId: string, version: number, now: number): Promise<boolean> {
-    const row = this.rows.get(oldHash);
-    if (!row || row.userId !== userId || row.authVersion !== version || !this.current(row, now)) return false;
-    this.rows.set(oldHash, { ...row, revokedAtMs: now });
-    this.revocations++;
-    return true;
-  }
-
-  async invalidateAllIfCurrent(
-    oldHash: string, userId: string, version: number, now: number,
-  ): Promise<boolean> {
-    this.beforeGlobal?.();
-    const row = this.rows.get(oldHash);
-    if (!row || row.userId !== userId || row.authVersion !== version
-      || !this.current(row, now) || !this.user
-      || this.user.authVersion >= Number.MAX_SAFE_INTEGER) return false;
-    this.user = { ...this.user, authVersion: this.user.authVersion + 1 };
-    return true;
+  /** Simula um commit único, sem alegar garantias de isolamento SQL. */
+  async applyWithAudit(
+    mutation: AuditedSessionMutation,
+    event: SecurityAuditEvent,
+  ): Promise<'committed' | 'replayed' | 'conflict'> {
+    this.auditedCalls++;
+    if (mutation.kind === 'revoke-all-sessions') this.beforeGlobal?.();
+    const fingerprint = JSON.stringify(mutation);
+    const previous = this.operations.get(mutation.operationId);
+    if (previous !== undefined) return previous === fingerprint ? 'replayed' : 'conflict';
+    const row = this.rows.get(mutation.sessionHash);
+    if (!row || !this.current(row, NOW)
+      || mutation.userId !== row.userId
+      || mutation.expectedAuthVersion !== row.authVersion
+      || event.eventId !== mutation.operationId
+      || event.correlationId !== mutation.correlationId
+      || event.subject.kind !== 'user' || event.subject.userId !== row.userId
+      || event.type !== (mutation.kind === 'revoke-session'
+        ? 'session-revoked' : 'sessions-revoked-all')) return 'conflict';
+    if (this.failAuditInsert) throw new Error('simulated outbox insert failed');
+    // All mutations below are synchronous, modeling a single commit/rollback.
+    if (mutation.kind === 'revoke-session') {
+      this.rows.set(mutation.sessionHash, { ...row, revokedAtMs: NOW });
+      this.revocations++;
+    } else {
+      if (!this.user || this.user.authVersion >= Number.MAX_SAFE_INTEGER) return 'conflict';
+      this.user = { ...this.user, authVersion: this.user.authVersion + 1 };
+    }
+    this.auditOutbox.set(event.eventId, structuredClone(event));
+    this.operations.set(mutation.operationId, fingerprint);
+    return 'committed';
   }
 }
 
@@ -322,3 +341,93 @@ test('somente autenticação atual permite ações de ciclo de vida', async () =
   assert.equal(ctx.store.revocations, 0);
 });
 
+
+
+test('logout grava revogação e evento tipado na mesma operação', async () => {
+  const ctx = context();
+  const session = await issue(ctx);
+  assert.deepEqual(await ctx.lifecycle.logout(credentials(session)), { ok: true });
+  assert.equal(ctx.store.auditOutbox.size, 1);
+  assert.equal(ctx.store.operations.size, 1);
+  const event = [...ctx.store.auditOutbox.values()][0];
+  assert.equal(event?.type, 'session-revoked');
+  assert.deepEqual(event?.subject, { kind: 'user', userId: USER });
+  assert.equal(event?.correlationId.length, 36);
+  assert.equal(JSON.stringify(event).includes(session.sessionToken), false);
+  assert.equal(JSON.stringify(event).includes(session.csrfToken), false);
+  assert.equal(JSON.stringify(event).includes(digest(session.sessionToken)), false);
+});
+
+test('revogação global cria um evento e invalida sessões por authVersion', async () => {
+  const ctx = context();
+  const first = await issue(ctx);
+  await issue(ctx);
+  assert.deepEqual(await ctx.lifecycle.invalidateAll(credentials(first)), { ok: true });
+  assert.equal(ctx.store.auditOutbox.size, 1);
+  const event = [...ctx.store.auditOutbox.values()][0];
+  assert.equal(event?.type, 'sessions-revoked-all');
+  assert.equal(ctx.store.user?.authVersion, 4);
+});
+
+test('falha ao registrar outbox reverte revogação de sessão e permite retry', async () => {
+  const ctx = context();
+  const c = await issue(ctx);
+  ctx.store.failAuditInsert = true;
+  await assert.rejects(ctx.lifecycle.logout(credentials(c)), /outbox insert failed/);
+  assert.equal(ctx.store.revocations, 0);
+  assert.equal(ctx.store.auditOutbox.size, 0);
+  assert.equal(ctx.store.operations.size, 0);
+  assert.equal((await ctx.access.authorize('list-posts', { sessionToken: c.sessionToken })).ok, true);
+  ctx.store.failAuditInsert = false;
+  assert.deepEqual(await ctx.lifecycle.logout(credentials(c)), { ok: true });
+  assert.equal(ctx.store.auditOutbox.size, 1);
+});
+
+test('falha na auditoria impede incremento global de authVersion', async () => {
+  const ctx = context();
+  const c = await issue(ctx);
+  ctx.store.failAuditInsert = true;
+  await assert.rejects(ctx.lifecycle.invalidateAll(credentials(c)), /outbox insert failed/);
+  assert.equal(ctx.store.user?.authVersion, 3);
+  assert.equal(ctx.store.auditOutbox.size, 0);
+  assert.equal((await ctx.access.authorize('list-posts', { sessionToken: c.sessionToken })).ok, true);
+});
+
+test('CSRF ausente ou Origin incorreta não chega à porta auditada', async () => {
+  const ctx = context();
+  const c = await issue(ctx);
+  for (const input of [
+    { sessionToken: c.sessionToken },
+    { sessionToken: c.sessionToken, csrfHeader: c.csrfToken, requestOrigin: 'https://evil.test' },
+  ]) {
+    assert.deepEqual(await ctx.lifecycle.logout(input), { ok: false, error: 'csrf-rejected' });
+    assert.deepEqual(await ctx.lifecycle.invalidateAll(input), { ok: false, error: 'csrf-rejected' });
+  }
+  assert.equal(ctx.store.auditedCalls, 0);
+  assert.equal(ctx.store.auditOutbox.size, 0);
+});
+
+test('duas chamadas concorrentes de logout não geram duas revogações ou eventos', async () => {
+  const ctx = context();
+  const c = await issue(ctx);
+  const results = await Promise.all([
+    ctx.lifecycle.logout(credentials(c)),
+    ctx.lifecycle.logout(credentials(c)),
+  ]);
+  assert.equal(results.filter(x => x.ok).length, 1);
+  assert.equal(ctx.store.revocations, 1);
+  assert.equal(ctx.store.auditOutbox.size, 1);
+});
+
+test('conflito na versão da sessão não grava evento de revogação global', async () => {
+  const ctx = context();
+  const c = await issue(ctx);
+  ctx.store.beforeGlobal = () => {
+    if (ctx.store.user) ctx.store.user = { ...ctx.store.user, authVersion: 4 };
+    ctx.store.beforeGlobal = undefined;
+  };
+  assert.deepEqual(await ctx.lifecycle.invalidateAll(credentials(c)),
+    { ok: false, error: 'conflict' });
+  assert.equal(ctx.store.auditOutbox.size, 0);
+  assert.equal(ctx.store.operations.size, 0);
+});

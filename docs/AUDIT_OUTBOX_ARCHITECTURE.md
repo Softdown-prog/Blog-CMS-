@@ -32,10 +32,13 @@ transação serializável ou equivalente comprovado por testes de concorrência:
 5. COMMIT de mudança+outbox+idempotência ou ROLLBACK de tudo.
    Evento não pode existir isolado se a alteração não ocorreu.
 
-**Importante:** esse caso de uso ainda NÃO está acoplado a `SessionLifecycle`.
-Antes do primeiro login real, as implementações existentes de logout e
-revogação global terão de passar pela porta auditada, e não criar gravação
-de auditoria depois de já confirmar a operação.
+**Integração interna concluída:** `SessionLifecycle.logout()` e
+`SessionLifecycle.invalidateAll()` usam agora `CommitAuditedSessionMutation`
+através do MESMO `SessionLifecycleStore` que lê sessões. As portas de escrita
+direta foram removidas. Os métodos validam sessão, CSRF e Origin antes da porta
+transacional; o CAS do adaptador futuro precisa revalidar tudo no COMMIT.
+A emissão e rotação de sessão permanecem com seus contratos específicos; a
+cobertura de auditoria dessas operações ainda precisa ser definida.
 
 ## Etapa B — projeção confiável do evento em ledger interno
 `ProjectSecurityAuditOutbox.runOnce` é uma função offline, SEM scheduler.
@@ -75,7 +78,8 @@ Esses testes NÃO executam transações reais, nem provam isolamento PostgreSQL.
 - Rodar testes com conexões PostgreSQL simultâneas e falhas após INSERT.
 - Medir atraso de outbox, backlog, número de retries, retenção/expurgo e
   alarmes de falhas sem registrar segredos.
-- Integrar `SessionLifecycle` com uma porta auditada, após revisão de Auth/CSRF.
+- Integrar o adaptador SQL REAL dessa porta e testar autenticação HTTP/CSRF;
+  a composição interna em TypeScript já foi implementada.
 - Testes Guardian/Chromium/Playwright e auditoria de segurança HTTP.
 - Somente depois disso: integrações e homologação; deploy com autorização.
 

@@ -26,13 +26,16 @@ atual, usuário ativo, prazo e estado de revogação. Duas rotações concorrent
 não podem ser aceitas ambas. Não renovar sessão expirou ou foi revogada.
 
 ## Logout
-logout() valida sessão, CSRF e Origin. A porta revokeIfCurrent marca revokedAtMs
-sob controle atômico de hash e versão; não afeta outras sessões.
+logout() valida sessão, CSRF e Origin; então chama o contrato auditado
+`CommitAuditedSessionMutation` com `revoke-session`. A transação futura deve
+marcar `revokedAtMs` e inserir a outbox no mesmo COMMIT. Não há porta direta
+`revokeIfCurrent` que permita contornar a auditoria.
 O cliente futuro removerá cookie imediatamente, mesmo em erro; não implementado.
 
 ## Encerrar todas as sessões
-invalidateAll() autoriza a ação pela sessão atual com CSRF/Origin e executa
-uma única atualização atômica de authVersion do próprio usuário.
+invalidateAll() autoriza a ação pela sessão atual com CSRF/Origin e exige
+`CommitAuditedSessionMutation` com `revoke-all-sessions`. A transação futura
+incrementa `authVersion` e registra evento na outbox no mesmo COMMIT.
 Todas as sessões com versão anterior tornam-se inválidas, mesmo que seus
 registros ainda existam fisicamente até expurgo seguro. Não pode direcionar
 a operação a outro usuário por parâmetro recebido do cliente.
@@ -41,8 +44,8 @@ a operação a outro usuário por parâmetro recebido do cliente.
 SessionLifecycleStore estende AdminSessionReader:
 - createIfUserCurrent: inserir somente se usuário ativo e versão atual;
 - rotateIfCurrent: validar sessão e usuário no mesmo commit que troca os dois hashes;
-- revokeIfCurrent: revogação da sessão correta, sem apagar sessões alheias;
-- invalidateAllIfCurrent: CAS de sessão atual e incremento de authVersion;
+- applyWithAudit: CAS da sessão/usuário, alteração de estado, idempotência
+  e INSERT do evento na outbox no mesmo COMMIT (sem perder auditoria);
 - findSessionByHash e findUserById: carregar estado atual, sem cache de permissões.
 Não confundir teste em memória com testes transacionais em PostgreSQL.
 Falha de persistência propaga exceção, nunca deve retornar sucesso falso.
@@ -65,6 +68,12 @@ continua na CI, sem autorizar deploy.
 
 O contrato `VerifyPasswordLogin` agora pode produzir uma prova interna `VerifiedLogin` quando um `PasswordVerifier` confiável aceitar uma senha e o limitador conceder uma tentativa. **Esta prova não deve ser exposta como DTO HTTP**. Ver [CREDENTIALS_RECOVERY.md](CREDENTIALS_RECOVERY.md). A integração real com Argon2id, limitação compartilhada e recuperação está pendente.
 
-## Auditoria atômica a integrar por último
+## Auditoria atômica conectada internamente (sem infraestrutura)
 
-As portas `AtomicSecurityMutationPort` e `AuditOutboxProjectionPort` estão definidas, porém `SessionLifecycle` ainda não está conectado a elas. Antes de ativar logout/revogação em produção, exigir persistência atômica de estado, evento e idempotência. Ver [AUDIT_OUTBOX_ARCHITECTURE.md](AUDIT_OUTBOX_ARCHITECTURE.md).
+`SessionLifecycle` agora exige que o MESMO `SessionLifecycleStore` implemente
+`AtomicSecurityMutationPort`: logout e revogação global obrigatoriamente passam
+por `CommitAuditedSessionMutation`, não por persistência direta. Operação e correlação
+recebem UUIDs novos do servidor; a repetição idempotente com um ID estável é
+suportada pela porta auditada, mas ainda não é propagada por uma camada HTTP.
+O adaptador SQL real, a autenticação HTTP, a transação e o consumer da outbox
+continuam pendentes. Ver [AUDIT_OUTBOX_ARCHITECTURE.md](AUDIT_OUTBOX_ARCHITECTURE.md).
