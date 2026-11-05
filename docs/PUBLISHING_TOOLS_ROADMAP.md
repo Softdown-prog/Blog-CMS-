@@ -1,5 +1,12 @@
 # Ferramentas de publicação — pesquisa e plano técnico
 
+> **Critério vigente:** consultar [CMS_MVP_PRIORITIES.md](CMS_MVP_PRIORITIES.md)
+> antes de iniciar qualquer módulo. O fluxo salvar/publicar/ler é mais urgente
+> que ampliar contratos auxiliares. As seções abaixo registram evolução
+> histórica; alguns itens antigos marcados como "planejado" já existem como
+> protótipos em memória, **não** como recursos integrados.
+
+
 ## Princípio
 
 Construir um CMS útil para publicar textos e imagens, não apenas um backend de
