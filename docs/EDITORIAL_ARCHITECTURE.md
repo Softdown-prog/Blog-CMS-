@@ -92,3 +92,9 @@ editor-workbench.ts converte uma imagem selecionada ao contrato editorial
 canônico { type: image, mediaId, alt } sem URL nem HTML arbitrário.
 A capa é mantida à parte, em FeaturedMediaV1, sem alterar EditorialPost.
 Persistência, permissões e revisão otimista ficam para a fase final.
+
+## Reserva futura de upload de mídia
+
+`media-upload-preflight.ts` é um contrato puro e isolado de reserva por
+usuário, com porta transacional ainda sem adaptador. Retorno não disponibiliza
+arquivo, URL ou token. Ver [MEDIA_UPLOAD_PREPARATION.md](MEDIA_UPLOAD_PREPARATION.md).
