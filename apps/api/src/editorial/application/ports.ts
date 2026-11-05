@@ -12,6 +12,8 @@ export interface EditorialRepository {
   compareAndSave(
     next: EditorialPost,
     expectedRevision: number,
+    /** Identidade do ator validado pelo caso de uso, para auditoria de edição. */
+    editorId: string,
   ): Promise<'updated' | 'conflict' | 'duplicate-slug'>;
 }
 
