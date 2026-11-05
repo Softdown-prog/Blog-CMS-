@@ -194,7 +194,7 @@ test('HTTP administrativo com PostgreSQL 18, Argon2id, CSRF e transações reais
   await t.test('falha no INSERT da auditoria desfaz emissão da sessão', async () => {
     await pool.query(
       `ALTER TABLE cms_security_outbox ADD CONSTRAINT ci_reject_issue
-       CHECK (event->>'type' <> 'session-issued')`,
+       CHECK (event->>'type' <> 'session-issued') NOT VALID`,
     );
     const before = await pool.query<{ count: string }>(
       'SELECT count(*)::text AS count FROM cms_admin_sessions WHERE user_id=$1::uuid',
