@@ -52,7 +52,7 @@ test('integração editorial com PostgreSQL 18 descartável', async (t) => {
       "SELECT indexname AS name FROM pg_indexes WHERE tablename='cms_post_revisions'",
     );
     assert.ok(exists.rows.some(row => row.name === 'cms_revisions_history_idx'));
-    const db = await pool.query<{ version: string }>('SHOW server_version');
+    const db = await pool.query<{ version: string }>("SELECT current_setting('server_version') AS version");
     assert.ok(db.rows[0]?.version.startsWith('18.'));
     await pool.query(
       `INSERT INTO cms_users (id,email,password_hash,role)
