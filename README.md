@@ -14,13 +14,17 @@ CMS de blog próprio, hospedado exclusivamente na VPS. Repositório em implanta�
 - `apps/web`: único frontend Angular. A lista pública navega para `/posts/:slug`,
   que exibe parágrafos, títulos, citações e listas com texto escapado. Referências
   de imagem mostram apenas seu texto ALT até existir mídia pública validada.
-  A bancada `/admin` é demonstrativa, com rascunho apenas em memória.
+  `/login` autentica no NestJS e a rota `/admin` exige sessão válida; a bancada
+  editorial dentro do painel continua demonstrativa, em memória e sem escrita.
 - `apps/api`: NestJS com leitura pública de lista e detalhe de artigos publicados
   via PostgreSQL quando configurado (`GET /api/public/posts` e
   `GET /api/public/posts/:slug`). Rascunhos, agendados e arquivados não são
   expostos; falhas do banco são 503, ausências são 404. Escrita editorial,
-  autenticação e uploads ainda não têm conexão HTTP de produção.
-- `database/migrations` e `database/proposals`: SQL versionado/proposto,
+  edição de artigos e uploads ainda não têm conexão HTTP de produção. O adaptador
+  de login/sessão HTTP já usa Argon2id e PostgreSQL quando a configuração de
+  autenticação está presente; sem configuração, retorna 503 sem fallback.
+- `database/migrations` e `database/proposals`: SQL versionado/proposto (incluindo
+  proposta 003 para sessões e segurança),
   **não aplicado à VPS**.
 - `scripts/sac-build.mjs`: pipeline SAC; Playwright testa a bancada offline e
   a navegação pública com respostas HTTP simuladas nos testes do navegador.
@@ -39,7 +43,11 @@ npm run start --prefix apps/web
 ```
 API: http://localhost:3000/api/health; web: http://localhost:4200.
 Leitura pública depende de PostgreSQL configurado e artigos previamente publicados.
-Não há mecanismo HTTP de criação/publicação ou login; a bancada é uma demonstração.
+O login HTTP e o logout existem no código, mas dependem da proposta 003 aplicada
+em base isolada e de variáveis de ambiente; não há cadastro de contas, criação/
+publicação de artigos nem homologação de proxy/segurança para produção.
+Veja `docs/ADMIN_SESSION_ARCHITECTURE.md`.
+A bancada editorial ainda é uma demonstração.
 **Não implantar em produção.**
 
 ## Qualidade e integração

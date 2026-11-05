@@ -25,7 +25,7 @@ prontidão para produção.
 | --- | --- | --- | --- |
 | Escrever artigo | Demonstrativo e em memória | `apps/web/src/app/admin-preview.component.ts` | Autor escreve com teclado/touch e não perde conteúdo após salvar |
 | Salvar rascunho | Caso de uso interno; não ligado ao navegador | `apps/api/src/editorial/application/commands.ts` | Salvar, recarregar e recuperar do banco com revisão/autor corretos |
-| Entrar e administrar | Regras de sessão e segurança sem login HTTP | `apps/api/src/security/`; `apps/api/src/app.module.ts` | Login real com sessão segura, CSRF/Origin, RBAC e logout |
+| Entrar e administrar | Login/sessão/logout HTTP e proteção da rota Angular implementados; sem implantação, cadastro ou fluxo de escrita | `apps/api/src/security/admin-auth.controller.ts`; `apps/web/src/app/admin-auth.guard.ts` | Testes HTTP/PostgreSQL 18/Playwright; exigir homologação de Caddy, limites de rede, retenção e provisão antes de produção |
 | Publicar artigo | Política interna, sem rota de escrita | `apps/api/src/editorial/application/commands.ts` | Editor/admin publica e o leitor consegue abrir o artigo completo |
 | Listar artigos públicos | Endpoint de listagem implementado, depende do banco | `apps/api/src/posts.controller.ts`; `posts.service.ts` | Consulta somente publicados, com paginação e tratamento de falhas |
 | Abrir artigo por endereço | Rota pública e leitura por slug implementadas, dependem de PostgreSQL e conteúdo válido | `apps/api/src/posts.service.ts`; `apps/web/src/app/post-detail.component.ts` | HTTP 200/404/503, SQL parametrizado, texto escapado, testes desktop/mobile; validar também com dados reais antes da produção |
@@ -97,3 +97,23 @@ de autenticação/CSRF. Ver `docs/POSTGRES.md`.
 - A criação, edição, publicação e fluxo de sessão continuam pendentes. Nenhuma
   migration foi aplicada à VPS, e nenhuma funcionalidade administrativa foi
   exposta sem autenticação.
+
+## Sessão administrativa HTTP — etapa implementada na branch
+
+- **Código:** NestJS recebe login por e-mail/senha, entrega cookie de sessão
+  HttpOnly e cookie CSRF separado, suporta `GET /api/admin/session`,
+  `POST /api/admin/rotate` e `POST /api/admin/logout`, e nega ações sem
+  Origin exata, cabeçalho CSRF ou sessão ativa.
+- **Persistência:** proposta 003 contém tabelas de sessões, rate limit e
+  outbox. Adapter PostgreSQL valida `authVersion`, faz mutações e auditoria na
+  mesma transação e reserva tentativas atomically (por conta/rede).
+- **Angular:** formulário `/login`, guard na rota `/admin`, logout e
+  indicação explícita de que a bancada continua offline. Não há rotas de
+  escrita editorial; o frontend não guarda sessão em `localStorage`.
+- **CI:** testa emissão, renovação, logout, autenticação Argon2id e rollback
+  SQL em banco descartável; Playwright emula UI e HTTP de login (respostas
+  simuladas). Não são testes de deploy, nem do proxy Caddy real.
+- **Bloqueios:** revisão de segurança, criação segura da primeira conta,
+  migração de banco povoado, alinhamento de proxy/IP confiável, retenção de
+  tentativas/sessões, lockfiles, controles de cabeçalhos e homologação mobile
+  com a API real. NÃO executar 003 na VPS sem autorização e revisão.
