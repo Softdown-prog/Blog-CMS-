@@ -109,3 +109,66 @@ persistência autenticada e revisão de acessibilidade permanecem pendentes.
 **Escopo futuro ainda não realizado:** upload de mídias, tags, categorias,
 editor completo com seleções/rich text, salvamento, autenticação HTTP,
 e publicação em banco.
+
+## Fase 2B — testes reais de navegador (Chromium + Playwright)
+
+- Adicionados `apps/web/playwright.config.ts` e `apps/web/e2e/editor.spec.ts`.
+- O Playwright utiliza **o build Angular oficial** do SAC, servido apenas em
+  127.0.0.1:4173 por `scripts/serve-web.mjs` (servidor estático mínimo).
+- Dois projetos: Chromium desktop e Chromium com perfil **Pixel 5 emulado**
+  (não equivale a testar um dispositivo Android físico).
+- Cenários: edição, sugestões de slug/resumo, contagem de palavras e H3,
+  criação/remoção de lista e citação, conteúdo inválido, payload XSS tratado
+  como texto, abrir/fechar prévia, navegação por teclado, ausência de requests
+  de escrita/API, perda de estado após recarregar e overflow horizontal.
+- Workflow roda em runner descartável: `npm run test:e2e --prefix apps/web`.
+  Inclui logs, screenshots e traces apenas em caso de falha.
+- `main` agora também dispara verificações de CI em novos pushes;
+  **isso não ativa nenhum deploy**.
+
+Pendências após esta etapa: checagem em Android físico, acessibilidade com
+leitor de tela, múltiplos tamanhos intermediários, atalhos de teclado,
+persistence/auth HTTP, upload de mídia e banco. Não presumir que compilar e
+passar no Playwright garantam prontidão para produção.
+ 
+## Fase 2C — taxonomia e marcadores em memória
+
+O contrato isolado `apps/api/src/editorial/publication-taxonomy.ts`
+representa **uma categoria opcional** e **até 12 tags** em nomes legíveis.
+Inclui normalização Unicode, limites, campos exatos, deduplicação por
+acentos/maiúsculas, rejeição de controles e delimitadores de HTML e erros
+tipados. Não altera `EditorialPost` nem `EditorialDocumentV1`.
+
+A bancada Angular agora oferece escolha de categoria demonstrativa,
+adição/remoção de marcadores, avisos de duplicidade e exibição na prévia.
+Os valores são guardados apenas em signals e apagados ao recarregar.
+Os testes Playwright continuam em Chromium desktop e Pixel 5 emulado.
+
+**Não há categorias reais no banco, relação com posts, permalinks únicos,
+autenticação ou endpoints.** Antes de persistir, definir tabela normalizada
+de termos, aliases/slugs, relações post-termo e autorização/RBAC com
+compare-and-swap de revisão. Nunca confiar apenas na lista de categorias
+da interface.
+
+## Fase 2D — biblioteca de mídias de demonstração (branch)
+
+Foi criado o contrato puro apps/api/src/editorial/publication-media.ts,
+que valida UUID, extensão/MIME, tamanho, resolução, texto alternativo,
+duplicatas, versão e campos exatos. O catálogo possui três registros
+ilustrativos, SEM bytes de imagem, URL, preview real ou upload.
+
+O Angular agora oferece listagem de metadados, edição de texto alternativo,
+escolha/remoção de capa e inserção de bloco de imagem no artigo v1.
+A prévia mostra claramente um placeholder, jamais inventa um arquivo.
+A alteração de ALT de um bloco inserido não altera o catálogo original.
+A capa só pode referenciar uma mídia do catálogo com ALT preenchido.
+
+Regras futuras para upload real (NÃO implementadas): RBAC e propriedade;
+verificação de bytes mágicos e decodificação segura, não confiar em MIME
+do cliente; cotas, antivírus quando cabível, proteção contra bombas de
+descompressão, metadados EXIF, thumbnails, URLs e storage seguros,
+limpeza e auditoria; CAS de revisão para associar imagem ao artigo.
+A validação atual é apenas dos METADADOS declarados por fixtures.
+
+Testes de domínio, Angular AOT/SAC e Playwright desktop/mobile emulado
+devem confirmar a interface antes de integrar backend e PostgreSQL.

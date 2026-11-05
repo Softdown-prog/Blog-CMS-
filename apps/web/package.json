@@ -5,7 +5,8 @@
   "scripts": {
     "start": "ng serve",
     "build": "ng build --configuration production",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "test:e2e": "playwright test --config playwright.config.ts"
   },
   "dependencies": {
     "@angular/common": "~22.2.4",
@@ -20,7 +21,8 @@
     "@angular/build": "~22.2.5",
     "@angular/cli": "~22.2.5",
     "@angular/compiler-cli": "~22.2.4",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "@playwright/test": "^1.56.0"
   },
   "engines": {
     "node": ">=24.15.0 <25"

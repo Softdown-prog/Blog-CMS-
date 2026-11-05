@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createWorkbenchBlock, workbenchDocument, WORKBENCH_BLOCK_LIMIT } from './editor-workbench';
+import { createWorkbenchBlock, createWorkbenchImageBlock, workbenchDocument, WORKBENCH_BLOCK_LIMIT } from './editor-workbench';
+import { sampleMediaCatalog } from './publication-media';
 import { DocumentValidationError } from './document';
 
 test('conversão de blocos do editor usa documento canônico sem HTML', () => {
@@ -58,3 +59,36 @@ test('título H3 e listas mantêm sua semântica; nenhum evento de publicação'
   assert.equal(document.blocks[1]?.type, 'list');
 });
 
+
+
+test('imagem do catálogo produz bloco canônico mediaId + alt, sem URL', () => {
+  const asset = sampleMediaCatalog().items[0];
+  assert.ok(asset);
+  const block = createWorkbenchImageBlock(7, asset);
+  assert.deepEqual(workbenchDocument([block]), { schemaVersion: 1, blocks: [{
+    type: 'image', mediaId: asset.id, alt: asset.alt,
+  }] });
+  assert.equal(JSON.stringify(block).includes('https:'), false);
+});
+
+test('imagem sem ALT e objeto sem mediaId não entram no editor', () => {
+  const asset = sampleMediaCatalog().items[2];
+  assert.ok(asset);
+  assert.throws(() => createWorkbenchImageBlock(10, asset), /alternative text/);
+  assert.throws(() => workbenchDocument([{
+    id: 1, kind: 'image', level: 2, text: 'Descrição',
+  }]), /media ID/);
+});
+
+test('alterar ALT do bloco não modifica mídia original e usa validação canônica', () => {
+  const asset = sampleMediaCatalog().items[0];
+  assert.ok(asset);
+  const block = createWorkbenchImageBlock(9, asset);
+  const updated = { ...block, text: '<b>Descrição literal</b>' };
+  assert.deepEqual(workbenchDocument([updated]).blocks[0], {
+    type: 'image', mediaId: asset.id, alt: '<b>Descrição literal</b>',
+  });
+  assert.equal(asset.alt, 'Bancada de edição de artigos em uma tela');
+  assert.throws(() => workbenchDocument([{ ...block, text: 'x'.repeat(181) }]),
+    DocumentValidationError);
+});

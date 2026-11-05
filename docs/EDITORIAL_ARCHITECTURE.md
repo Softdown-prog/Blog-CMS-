@@ -84,3 +84,11 @@ interpolação de texto, não HTML arbitrário. Veja
 [PUBLISHING_TOOLS_ROADMAP.md](PUBLISHING_TOOLS_ROADMAP.md).
 A bancada é uma demonstração exclusivamente em memória e nunca toca o
 PostgreSQL nem comandos de publicação.
+
+## Referências offline de mídias e capa
+
+publication-media.ts valida metadados locais, sem garantir conteúdo do arquivo.
+editor-workbench.ts converte uma imagem selecionada ao contrato editorial
+canônico { type: image, mediaId, alt } sem URL nem HTML arbitrário.
+A capa é mantida à parte, em FeaturedMediaV1, sem alterar EditorialPost.
+Persistência, permissões e revisão otimista ficam para a fase final.
