@@ -4,7 +4,10 @@ import { Pool, QueryResultRow } from 'pg';
 export const BLOG_DATABASE = 'BLOG_DATABASE';
 
 export interface PostsDatabase {
-  query<Row extends QueryResultRow>(sql: string): Promise<{ readonly rows: Row[] }>;
+  query<Row extends QueryResultRow>(
+    sql: string,
+    parameters?: unknown[],
+  ): Promise<{ readonly rows: Row[] }>;
 }
 
 /**
@@ -34,4 +37,3 @@ export class DatabaseLifecycle implements OnApplicationShutdown {
     if (this.pool) await this.pool.end();
   }
 }
-

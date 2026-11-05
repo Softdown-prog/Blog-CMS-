@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/api/admin/session', async route => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ user: { id: '839e6d28-2466-46df-b8e7-425d05a2178b', role: 'editor' } }) });
+  });
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: 'Ferramentas de publicação' })).toBeVisible();
   await expect(page.getByTestId('workbench-offline')).toContainText('nada é salvo');
@@ -85,7 +89,8 @@ test('prévia alterna celular e desktop, ajuda pode ser aberta pelo teclado', as
 test('não há transações nem chamadas API durante edição; recarregar descarta mudanças', async ({ page }) => {
   const unexpected: string[] = [];
   page.on('request', request => {
-    if (request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() !== 'GET' || (pathname.startsWith('/api/') && pathname !== '/api/admin/session')) {
       unexpected.push(request.method() + ' ' + request.url());
     }
   });
@@ -139,7 +144,8 @@ test('marcador duplicado ou com HTML é recusado sem executar conteúdo', async 
 test('categoria e tags são descartadas após reload e não causam requests', async ({ page }) => {
   const unexpected: string[] = [];
   page.on('request', request => {
-    if (request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() !== 'GET' || (pathname.startsWith('/api/') && pathname !== '/api/admin/session')) {
       unexpected.push(request.method() + ' ' + request.url());
     }
   });
@@ -207,7 +213,8 @@ test('imagem sem ALT não pode ser usada até correção; HTML continua texto es
 test('capa e blocos com imagem desaparecem após recarregar, sem chamadas API', async ({ page }) => {
   const unexpected: string[] = [];
   page.on('request', request => {
-    if (request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() !== 'GET' || (pathname.startsWith('/api/') && pathname !== '/api/admin/session')) {
       unexpected.push(request.method() + ' ' + request.url());
     }
   });

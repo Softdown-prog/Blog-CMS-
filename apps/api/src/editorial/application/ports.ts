@@ -1,18 +1,19 @@
 import type { EditorialPost } from '../policy';
 
-/** Contrato puro: nenhum adaptador PostgreSQL é criado nesta etapa. */
+/** Contrato puro: existe adaptador PostgreSQL, ainda não registrado na API. */
 export interface EditorialRepository {
   findById(id: string): Promise<EditorialPost | null>;
-  /** A criação futura persistirá post e snapshot da revisão 0 atomicamente. */
+  /** Post e snapshot da revisão 0 são gravados atomicamente pelo adaptador PG. */
   createDraft(post: EditorialPost): Promise<'created' | 'duplicate-slug'>;
   /**
-   * Implementação futura: UPDATE condicional por id e revision.
-   * Gravar nova revisão e histórico na mesma transação; detectar conflito
-   * mesmo quando outra escrita ocorre após findById.
+   * UPDATE condicional por id + revision; snapshot e alteração precisam
+   * participar da mesma transação, inclusive sob concorrência real.
    */
   compareAndSave(
     next: EditorialPost,
     expectedRevision: number,
+    /** Identidade do ator validado pelo caso de uso, para auditoria de edição. */
+    editorId: string,
   ): Promise<'updated' | 'conflict' | 'duplicate-slug'>;
 }
 

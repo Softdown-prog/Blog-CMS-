@@ -63,3 +63,17 @@ outbox transacional e consumidor idempotente, ainda não implementados.
 GitHub Actions executa os testes Node/TypeScript/Nest e consulta o Data_libray
 SAC para preflight, compilação Angular AOT e pós-build. A aprovação estática
 não autoriza deploy nem confirma funcionalidades no navegador.
+
+## Avanço verificável — adaptador PostgreSQL
+
+Existe um adaptador isolado para `EditorialRepository` em
+`apps/api/src/editorial/application/postgres-repository.ts`.
+Criação e salvamento têm BEGIN/COMMIT/ROLLBACK, histórico atômico e CAS
+por revisão. `editorId` agora é passado pelo caso de uso com identidade
+do ator já validada, para não registrar falsamente o autor como editor.
+
+`postgres-repository.integration.spec.ts` exercita migração e transações
+com Postgres 18 real, **apenas dentro do serviço descartável do Actions**.
+A proposta 002 NÃO é aplicada na VPS e o módulo NestJS não registra
+o adaptador; HTTP e sessões continuam ausentes. O dispatcher agendado
+também continua sem adaptador SQL.

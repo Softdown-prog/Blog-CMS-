@@ -22,3 +22,23 @@ API pública não recebe SQL, filtro ou ordenação fornecidos pelo visitante. O
 ## Validação
 `npm test --prefix apps/api` cobre ausência de banco, falhas de conexão, resultado vazio e consulta parametrizada/SQL fixo. Ainda faltam testes de integração contra PostgreSQL real, autenticação, fluxo de publicação, Guardian e deploy. Não iniciar produção antes desses gates.
 
+## Persistência editorial transacional — banco descartável da CI
+
+`PgEditorialRepository` implementa a porta de criação, leitura e
+compare-and-save. Ele NÃO está registrado no módulo HTTP NestJS, pois
+login, sessão, CSRF/Origin e RBAC do adaptador HTTP ainda não existem.
+Apenas o domínio controla se o ator pode editar ou publicar.
+
+O job CI cria serviço isolado **PostgreSQL 18**, database `blog_cms_ci`,
+aplica a migração inicial `001_initial.sql` e a proposta
+`002_editorial_storage_draft.sql` **somente nessa base vazia**.
+O teste recusa nomes de banco que não sigam o padrão de CI, recusa host
+remoto e recusa banco com tabelas preexistentes. Nenhum SQL é executado
+na VPS. `002` continua em `database/proposals` (não promovido a
+migration de produção).
+
+Testes: criação e snapshot revision 0 em um COMMIT, duplicidade de slug,
+concorrência real de duas gravações, edição não autorizada, rollback
+provocado por constraint na tabela de revisões, histórico do editor,
+publicação autorizada e leitura pelo serviço público. Não são cenários
+de browser nem prova de login HTTP.

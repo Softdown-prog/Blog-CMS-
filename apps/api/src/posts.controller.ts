@@ -1,5 +1,5 @@
-import { Controller, Get } from '@nestjs/common';
-import { PostsService, PublicPostSummary } from './posts.service';
+import { Controller, Get, Param } from '@nestjs/common';
+import { PostsService, PublicPost, PublicPostSummary } from './posts.service';
 
 @Controller('public/posts')
 export class PostsController {
@@ -9,5 +9,9 @@ export class PostsController {
   listPublic(): Promise<readonly PublicPostSummary[]> {
     return this.posts.listPublic();
   }
-}
 
+  @Get(':slug')
+  getPublic(@Param('slug') slug: string): Promise<PublicPost> {
+    return this.posts.getPublicBySlug(slug);
+  }
+}
