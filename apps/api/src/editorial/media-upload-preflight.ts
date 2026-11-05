@@ -15,7 +15,7 @@ export const MEDIA_UPLOAD_RESERVATION_TTL_MS = 15 * 60_000;
 
 export type UploadPreflightError =
   | 'invalid-input' | 'forbidden' | 'invalid-file'
-  | 'invalid-size' | 'invalid-operation';
+  | 'invalid-size' | 'invalid-operation' | 'invalid-clock';
 
 export interface MediaUploadReservation {
   /** Trusted authenticated user; never supplied as an authorization grant. */
@@ -33,19 +33,23 @@ export type UploadPreflightResult =
   | Readonly<{ ok: true; reservation: MediaUploadReservation }>
   | Readonly<{ ok: false; error: UploadPreflightError }>;
 
-export type ReserveState = 'reserved' | 'replayed' | 'quota-exceeded' | 'conflict';
+/** Preserve tombstones so old operation IDs cannot become fresh holds. */
+export type ReserveState =
+  | 'reserved' | 'replayed' | 'quota-exceeded' | 'conflict'
+  | 'cancelled' | 'expired';
 
 /** This port MUST enforce owner-scoped idempotency and quotas in ONE transaction.
  * The future adapter must count BOTH existing bytes and outstanding holds.
  * No adapter is connected in production in this phase.
  */
 export interface MediaUploadReservationPort {
-  reserveAtomically(intent: MediaUploadReservation): Promise<ReserveState>;
+  reserveAtomically(intent: MediaUploadReservation, nowMs: number): Promise<ReserveState>;
 }
 
 export type BeginMediaUploadResult =
   | Readonly<{ ok: true; state: 'reserved' | 'replayed'; uploadEnabled: false }>
-  | Readonly<{ ok: false; error: UploadPreflightError | 'quota-exceeded' | 'conflict' }>;
+  | Readonly<{ ok: false; error: UploadPreflightError
+    | 'quota-exceeded' | 'conflict' | 'cancelled' | 'expired' }>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const FILENAME = /^[a-z0-9][a-z0-9._-]{0,119}\.(?:jpe?g|png|webp|avif)$/iu;
@@ -116,17 +120,27 @@ export function preflightMediaUpload(
  * An unexpected adapter state fails closed instead of implying success.
  */
 export class BeginMediaUpload {
-  constructor(private readonly port: MediaUploadReservationPort) {}
+  constructor(
+    private readonly port: MediaUploadReservationPort,
+    private readonly clockMs: () => number = Date.now,
+  ) {}
 
   async execute(actor: EditorialActor, input: unknown): Promise<BeginMediaUploadResult> {
     const parsed = preflightMediaUpload(actor, input);
     if (!parsed.ok) return parsed;
-    const state: unknown = await this.port.reserveAtomically(parsed.reservation);
+    const nowMs = this.clockMs();
+    if (!Number.isSafeInteger(nowMs) || nowMs < 0
+      || nowMs > 8_640_000_000_000_000 - MEDIA_UPLOAD_RESERVATION_TTL_MS) {
+      return { ok: false, error: 'invalid-clock' };
+    }
+    const state: unknown = await this.port.reserveAtomically(parsed.reservation, nowMs);
     switch (state) {
       case 'reserved':
       case 'replayed': return { ok: true, state, uploadEnabled: false };
       case 'quota-exceeded': return { ok: false, error: state };
-      case 'conflict': return { ok: false, error: state };
+      case 'conflict':
+      case 'cancelled':
+      case 'expired': return { ok: false, error: state };
       default: throw new Error('Unknown media reservation state');
     }
   }
