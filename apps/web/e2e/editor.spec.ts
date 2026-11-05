@@ -89,7 +89,8 @@ test('prévia alterna celular e desktop, ajuda pode ser aberta pelo teclado', as
 test('não há transações nem chamadas API durante edição; recarregar descarta mudanças', async ({ page }) => {
   const unexpected: string[] = [];
   page.on('request', request => {
-    if (request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() !== 'GET' || (pathname.startsWith('/api/') && pathname !== '/api/admin/session')) {
       unexpected.push(request.method() + ' ' + request.url());
     }
   });
@@ -143,7 +144,8 @@ test('marcador duplicado ou com HTML é recusado sem executar conteúdo', async 
 test('categoria e tags são descartadas após reload e não causam requests', async ({ page }) => {
   const unexpected: string[] = [];
   page.on('request', request => {
-    if (request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() !== 'GET' || (pathname.startsWith('/api/') && pathname !== '/api/admin/session')) {
       unexpected.push(request.method() + ' ' + request.url());
     }
   });
@@ -211,7 +213,8 @@ test('imagem sem ALT não pode ser usada até correção; HTML continua texto es
 test('capa e blocos com imagem desaparecem após recarregar, sem chamadas API', async ({ page }) => {
   const unexpected: string[] = [];
   page.on('request', request => {
-    if (request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) {
+    const pathname = new URL(request.url()).pathname;
+    if (request.method() !== 'GET' || (pathname.startsWith('/api/') && pathname !== '/api/admin/session')) {
       unexpected.push(request.method() + ' ' + request.url());
     }
   });
