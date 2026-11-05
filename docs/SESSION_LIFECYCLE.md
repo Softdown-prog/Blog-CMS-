@@ -90,3 +90,7 @@ verificam rollback lógico e concorrência, sem substituir isolamento SQL.
 Se houver confirmação ambígua de COMMIT, reemitir automaticamente outro token
 não é seguro: a futura integração precisa de protocolo de idempotência de
 emissão/rotação e estratégia de entrega de credenciais sem duplicação.
+
+## Invariantes extremos e retornos inesperados (contratos offline)
+
+A suíte agora exercita entradas malformadas, fronteiras exatas de 30 minutos e 8 horas, revogação/versões alteradas, repetição de segredos, disputas entre logout e renovação e entre invalidação global e renovação, além de 48 trajetórias determinísticas de estado. O retorno do adaptador de rotação só é aceito com `true` literal; strings ou objetos indevidos não podem liberar tokens de substituição. Não são testes de isolamento real nem substituem revisão das futuras transações PostgreSQL.

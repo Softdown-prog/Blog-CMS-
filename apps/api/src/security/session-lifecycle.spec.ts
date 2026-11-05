@@ -4,7 +4,7 @@ import type { AuditedSessionMutation } from './audit-outbox';
 import type { SecurityAuditEvent } from './security-audit';
 import test from 'node:test';
 import {
-  ActiveAdminUser, AdminSessionAccess, AdminSessionRecord,
+  ActiveAdminUser, AdminCredentialInput, AdminSessionAccess, AdminSessionRecord,
 } from './admin-session';
 import {
   SessionLifecycle, SessionLifecycleStore, SessionSecretSource,
@@ -576,4 +576,188 @@ test('relógio além do intervalo Date não emite sessão nem auditoria', async 
   assert.deepEqual(await ctx.lifecycle.issue(login), { ok: false, error: 'rejected' });
   assert.equal(ctx.store.creates, 0);
   assert.equal(ctx.store.auditOutbox.size, 0);
+});
+
+
+test('adaptador com retorno truthy inesperado NÃO libera credenciais renovadas', async () => {
+  const ctx = context();
+  const current = await issue(ctx);
+  ctx.store.rotateWithAudit = async () => 'updated' as unknown as boolean;
+  assert.deepEqual(await ctx.lifecycle.rotate(credentials(current)),
+    { ok: false, error: 'conflict' });
+  assert.equal(ctx.store.auditOutbox.size, 1);
+  assert.equal((await ctx.access.authorize('create-draft', credentials(current))).ok, true);
+});
+
+test('retorno inesperado na criação de sessão falha fechado', async () => {
+  const ctx = context();
+  ctx.store.createWithAudit = async () => 'created-without-audit' as 'created';
+  assert.deepEqual(await ctx.lifecycle.issue(login), { ok: false, error: 'rejected' });
+  assert.equal(ctx.store.rows.size, 0);
+  assert.equal(ctx.store.auditOutbox.size, 0);
+});
+
+test('entradas de credenciais nulas, arrays ou tipos inesperados não geram exceções nem escrita', async () => {
+  const ctx = context();
+  const valid = await issue(ctx);
+  const malformed: unknown[] = [null, undefined, [], 'token', 12, false, {}];
+  for (const input of malformed) {
+    assert.deepEqual(await ctx.lifecycle.rotate(input as AdminCredentialInput),
+      { ok: false, error: 'unauthenticated' });
+    assert.deepEqual(await ctx.lifecycle.logout(input as AdminCredentialInput),
+      { ok: false, error: 'unauthenticated' });
+    assert.deepEqual(await ctx.lifecycle.invalidateAll(input as AdminCredentialInput),
+      { ok: false, error: 'unauthenticated' });
+  }
+  assert.equal(ctx.store.rotations, 0);
+  assert.equal(ctx.store.revocations, 0);
+  assert.equal(ctx.store.auditedCalls, 0);
+  assert.equal(ctx.store.auditOutbox.size, 1);
+  assert.equal((await ctx.access.authorize('list-posts', { sessionToken: valid.sessionToken })).ok, true);
+});
+
+test('fronteiras exatas de inatividade e expiração absoluta falham fechado', async () => {
+  for (const elapsed of [30 * 60_000, 8 * 60 * 60_000]) {
+    const ctx = context();
+    const current = await issue(ctx);
+    ctx.time.now = NOW + elapsed - 1;
+    if (elapsed === 30 * 60_000) {
+      assert.equal((await ctx.access.authorize('list-posts', { sessionToken: current.sessionToken })).ok, true);
+    }
+    ctx.time.now = NOW + elapsed;
+    assert.deepEqual(await ctx.access.authorize('list-posts', { sessionToken: current.sessionToken }),
+      { ok: false, reason: 'unauthenticated' });
+    assert.deepEqual(await ctx.lifecycle.rotate(credentials(current)),
+      { ok: false, error: 'unauthenticated' });
+    assert.deepEqual(await ctx.lifecycle.logout(credentials(current)),
+      { ok: false, error: 'unauthenticated' });
+    assert.deepEqual(await ctx.lifecycle.invalidateAll(credentials(current)),
+      { ok: false, error: 'unauthenticated' });
+    assert.equal(ctx.store.auditOutbox.size, 1);
+    assert.equal(ctx.store.auditedCalls, 0);
+  }
+});
+
+test('sessão de usuário desativado ou authVersion alterada bloqueia TODAS as mutações', async () => {
+  for (const status of ['disabled', 'rekeyed'] as const) {
+    const ctx = context();
+    const current = await issue(ctx);
+    const user = ctx.store.user;
+    assert.ok(user);
+    ctx.store.user = status === 'disabled'
+      ? { ...user, enabled: false }
+      : { ...user, authVersion: user.authVersion + 1 };
+    for (const action of ['rotate', 'logout', 'invalidateAll'] as const) {
+      assert.deepEqual(await ctx.lifecycle[action](credentials(current)),
+        { ok: false, error: 'unauthenticated' });
+    }
+    assert.deepEqual(await ctx.lifecycle.issue(login), { ok: false, error: 'rejected' });
+    assert.equal(ctx.store.auditOutbox.size, 1);
+    assert.equal(ctx.store.auditedCalls, 0);
+  }
+});
+
+test('prova de login com relógio inválido ou valores fora do contrato não cria sessão', async () => {
+  const ctx = context();
+  const badProofs: unknown[] = [
+    null, [], {}, { ...login, verifiedAtMs: Number.NaN },
+    { ...login, verifiedAtMs: Number.POSITIVE_INFINITY },
+    { ...login, verifiedAtMs: NOW + 1 },
+    { ...login, verifiedAtMs: NOW - 5 * 60_000 - 1 },
+    { ...login, userId: 'admin' },
+    { ...login, authVersion: Number.MAX_SAFE_INTEGER + 1 },
+  ];
+  for (const proof of badProofs) {
+    assert.deepEqual(await ctx.lifecycle.issue(proof as VerifiedLogin),
+      { ok: false, error: 'rejected' });
+  }
+  assert.equal(ctx.store.rows.size, 0);
+  assert.equal(ctx.store.auditOutbox.size, 0);
+});
+
+test('repetição deliberada de segredos anteriores não permite rotação nem auditoria extra', async () => {
+  const firstSecret = Buffer.alloc(32, 41).toString('base64url');
+  const secondSecret = Buffer.alloc(32, 42).toString('base64url');
+  let counter = 0;
+  const repeatedSecrets: SessionSecretSource = {
+    newToken: () => (counter++ % 2 === 0 ? firstSecret : secondSecret),
+  };
+  const ctx = context(new FakeStore(), { now: NOW }, repeatedSecrets);
+  const issued = await issue(ctx);
+  await assert.rejects(ctx.lifecycle.rotate(credentials(issued)),
+    /repeated a previous credential/);
+  assert.equal(ctx.store.auditOutbox.size, 1);
+  assert.equal(ctx.store.rotations, 0);
+  assert.equal((await ctx.access.authorize('create-draft', credentials(issued))).ok, true);
+});
+
+test('corrida logout versus rotação tem um único vencedor e nunca duplica eventos', async () => {
+  const ctx = context();
+  const initial = await issue(ctx);
+  const [logout, renewal] = await Promise.all([
+    ctx.lifecycle.logout(credentials(initial)),
+    ctx.lifecycle.rotate(credentials(initial)),
+  ]);
+  assert.equal(Number(logout.ok) + Number(renewal.ok), 1);
+  assert.equal([...ctx.store.auditOutbox.values()].filter(x =>
+    x.type === 'session-rotated' || x.type === 'session-revoked').length, 1);
+  assert.deepEqual(await ctx.access.authorize('list-posts', { sessionToken: initial.sessionToken }),
+    { ok: false, reason: 'unauthenticated' });
+  if (renewal.ok) {
+    assert.equal((await ctx.access.authorize('list-posts', {
+      sessionToken: renewal.credentials.sessionToken,
+    })).ok, true);
+  }
+});
+
+test('corrida revogação global versus rotação não deixa tokens válidos se revogação vencer', async () => {
+  const ctx = context();
+  const initial = await issue(ctx);
+  const [global, renewal] = await Promise.all([
+    ctx.lifecycle.invalidateAll(credentials(initial)),
+    ctx.lifecycle.rotate(credentials(initial)),
+  ]);
+  assert.equal(Number(global.ok) + Number(renewal.ok), 1);
+  assert.equal([...ctx.store.auditOutbox.values()].filter(x =>
+    x.type === 'session-rotated' || x.type === 'sessions-revoked-all').length, 1);
+  assert.deepEqual(await ctx.access.authorize('list-posts', {
+    sessionToken: initial.sessionToken,
+  }), { ok: false, reason: 'unauthenticated' });
+  if (global.ok) assert.equal(ctx.store.user?.authVersion, 4);
+});
+
+test('matriz determinística de 48 trajetórias mantém trilha coerente, sem tokens na auditoria', async () => {
+  for (let i = 0; i < 48; i++) {
+    const ctx = context();
+    const initial = await issue(ctx);
+    const mode = i % 4;
+    let activeToken: string | null = initial.sessionToken;
+    if (mode === 0) {
+      const rotated = await ctx.lifecycle.rotate(credentials(initial));
+      assert.equal(rotated.ok, true);
+      if (rotated.ok) activeToken = rotated.credentials.sessionToken;
+    } else if (mode === 1) {
+      assert.deepEqual(await ctx.lifecycle.logout(credentials(initial)), { ok: true });
+      activeToken = null;
+    } else if (mode === 2) {
+      assert.deepEqual(await ctx.lifecycle.invalidateAll(credentials(initial)), { ok: true });
+      activeToken = null;
+    } else {
+      assert.deepEqual(await ctx.lifecycle.rotate({
+        ...credentials(initial), requestOrigin: 'https://attacker.invalid',
+      }), { ok: false, error: 'csrf-rejected' });
+    }
+    const kinds = [...ctx.store.auditOutbox.values()].map(e => e.type);
+    assert.deepEqual(kinds, mode === 0 ? ['session-issued', 'session-rotated']
+      : mode === 1 ? ['session-issued', 'session-revoked']
+        : mode === 2 ? ['session-issued', 'sessions-revoked-all'] : ['session-issued']);
+    const auditText = JSON.stringify([...ctx.store.auditOutbox.values()]);
+    for (const secret of [initial.sessionToken, initial.csrfToken,
+      digest(initial.sessionToken), digest(initial.csrfToken)]) {
+      assert.equal(auditText.includes(secret), false);
+    }
+    assert.equal((await ctx.access.authorize('list-posts', {
+      sessionToken: activeToken,
+    })).ok, activeToken !== null);
+  }
 });

@@ -140,7 +140,10 @@ export class AdminSessionAccess {
 
   async authorize(action: AdminAction, input: AdminCredentialInput): Promise<AdminAccessResult> {
     if (!ALL_ACTIONS.includes(action)) return { ok: false, reason: 'forbidden' };
-    if (!canonicalToken(input.sessionToken)) return { ok: false, reason: 'unauthenticated' };
+    if (input === null || typeof input !== 'object' || Array.isArray(input)
+      || !canonicalToken(input.sessionToken)) {
+      return { ok: false, reason: 'unauthenticated' };
+    }
     const now = this.nowMs();
     if (!Number.isSafeInteger(now) || now < 0) return { ok: false, reason: 'unauthenticated' };
 

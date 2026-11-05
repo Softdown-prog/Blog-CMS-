@@ -217,7 +217,8 @@ export class SessionLifecycle {
     };
     const event = this.newSessionEvent('session-rotated', access.actor.id, now);
     const updated = await this.store.rotateWithAudit(oldHash, next, now, event);
-    return updated
+    // A malformed adapter value must never release replacement credentials.
+    return updated === true
       ? { ok: true, credentials: { ...fresh, expiresAtMs: prior.expiresAtMs } }
       : { ok: false, error: 'conflict' };
   }
