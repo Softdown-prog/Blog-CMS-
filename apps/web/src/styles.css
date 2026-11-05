@@ -15,3 +15,14 @@ button { padding: .8rem 1rem; border: none; border-radius: .5rem; background: #1
 button:focus-visible, a:focus-visible { outline: 3px solid #f7b955; outline-offset: 3px; }
 footer { padding: 2rem 1rem; text-align: center; color: #61728a; }
 
+
+/* Leitura pública em desktop e mobile; conteúdo nunca é inserido via innerHTML. */
+.back-link { display: inline-block; margin-bottom: 1.5rem; }
+.public-article { background: white; border: 1px solid #dce4ed; border-radius: .8rem; padding: clamp(1.25rem, 4vw, 3rem); }
+.article-meta { color: #586b80; font-size: .9rem; }
+.article-excerpt { font-size: 1.13rem; line-height: 1.65; color: #43566a; }
+.article-body { overflow-wrap: anywhere; line-height: 1.75; font-size: 1.05rem; }
+.article-body h2, .article-body h3 { margin-top: 1.8em; line-height: 1.25; }
+.article-body blockquote { margin: 1.5rem 0; padding: .25rem 1.25rem; border-left: 4px solid #3977ad; background: #f4f7fb; }
+.article-body li { margin: .3rem 0; }
+.article-media-placeholder { border: 1px dashed #b7c6d7; padding: 1rem; color: #546479; }

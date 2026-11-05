@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { catchError, map, of } from 'rxjs';
 
 interface PostSummary {
@@ -18,6 +19,7 @@ type PostState =
 @Component({
   selector: 'blog-home',
   standalone: true,
+  imports: [RouterLink],
   template: `
     <section class="container">
       <p class="eyebrow">BLOG</p>
@@ -31,8 +33,9 @@ type PostState =
         } @else {
           @for (post of state().posts; track post.id) {
             <article class="panel">
-              <h2>{{ post.title }}</h2>
+              <h2><a [routerLink]="['/posts', post.slug]">{{ post.title }}</a></h2>
               <p>{{ post.excerpt }}</p>
+              <a [routerLink]="['/posts', post.slug]" [attr.aria-label]="'Ler artigo: ' + post.title">Ler artigo</a>
             </article>
           } @empty {
             <p class="panel">Ainda não existem artigos publicados.</p>
@@ -52,4 +55,3 @@ export class HomeComponent {
     { initialValue: { status: 'loading', posts: [] } as PostState },
   );
 }
-
