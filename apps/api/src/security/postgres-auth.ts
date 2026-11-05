@@ -263,10 +263,14 @@ export class PgAuthenticationStore implements
           [mutation.sessionHash, nowMs],
         );
       } else {
-        await client.query(
+        const changed = await client.query(
           `UPDATE cms_users SET auth_version=auth_version+1
             WHERE id=$1::uuid AND auth_version < 9007199254740990`, [mutation.userId],
         );
+        if (changed.rowCount !== 1) {
+          await client.query('ROLLBACK');
+          return 'conflict';
+        }
       }
       await this.writeEvent(client, event);
       await client.query('COMMIT');
