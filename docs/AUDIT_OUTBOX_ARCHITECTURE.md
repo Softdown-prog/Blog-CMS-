@@ -99,3 +99,23 @@ Nenhum token, hash de sessão, senha ou CSRF entra no registro de eventos.
 Essas operações ainda não compartilham o protocolo de replay da revogação:
 antes da integração final, projetar recuperação de confirmações de COMMIT
 ambíguas sem enviar duas credenciais diferentes para uma mesma operação.
+ 
+## Falhas ambíguas e retries verificados em simulação (continuação)
+
+Testes adicionais exercitam:
+- confirmação de COMMIT seguida de perda da resposta; repetir com o MESMO operationId original retorna replay;
+- alteração dos argumentos com mesmo operationId é conflito, inclusive após COMMIT;
+- erro anterior ao COMMIT é seguro para retry e não produz evento órfão;
+- 20 retries paralelos de uma operação global incrementam authVersion apenas uma vez;
+- 12 operações diferentes disputando a mesma sessão têm um único vencedor;
+- resposta do ACK perdida após gravação do ledger não duplica registro;
+- morte após claim, recuperação por lease e rejeição de lease antigo (fencing);
+- evento idêntico já projetado e ACK ausente é marcado sem segundo INSERT;
+- adaptador que retorna um estado não documentado falha explicitamente.
+
+**Limite conhecido:** `SessionLifecycle.commitRevocation` ainda gera operationId novo a cada chamada.
+A reutilização estável de ID entre retransmissões HTTP exige futuro adaptador que
+recupere/associe a intenção original de forma autenticada. Até lá, a garantia
+simulada vale para a porta `CommitAuditedSessionMutation`, não para o caminho
+HTTP completo. Não alegar exactly-once entre serviços. Testes de isolamento
+PostgreSQL, perda de conexão e rollback transacional real continuam pendentes.

@@ -64,3 +64,13 @@ Validação negativa de schema, HTML não confiável, campos indevidos, limites 
 6. SEO, páginas públicas, logs sem dados sensíveis, observabilidade e limites de recursos.
 
 O Data_libray/SAC existente deve continuar validando o build; não acoplar a biblioteca ao domínio. Nenhum deploy, provisionamento de banco ou criação de PR/merge nesta etapa.
+ 
+## Ferramentas de publicação (núcleo offline)
+
+`apps/api/src/editorial/publication-tools.ts` contém o primeiro assistente
+editorial read-only do CMS. Sugere slug ASCII, resumo derivado de parágrafo,
+estrutura H2/H3, total de palavras, tempo estimado de leitura (200 palavras/min)
+e avisos sobre título, resumo, conteúdo e alt de imagens. Reusa
+`parseEditorialDocument` — não converte texto em HTML, não grava campos,
+não conhece o usuário, não roda no Angular ainda e não é regra de autorização.
+Ver [PUBLISHING_TOOLS_ROADMAP.md](PUBLISHING_TOOLS_ROADMAP.md).

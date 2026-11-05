@@ -338,3 +338,152 @@ test('relógio inválido não consulta outbox e retorna erro de input', async ()
   assert.equal(db.ledger.size, 0);
 });
 
+
+test('commit confirmado e resposta perdida permite retry com mesmo ID sem dupla revogação', async () => {
+  for (const kind of ['revoke-session', 'revoke-all-sessions']) {
+    const db = new FakeDatabase();
+    let lost = true;
+    const uncertain: AtomicSecurityMutationPort = {
+      async applyWithAudit(mutation, event) {
+        const result = await db.applyWithAudit(mutation, event);
+        if (lost) { lost = false; throw new Error('connection lost after COMMIT'); }
+        return result;
+      },
+    };
+    const useCase = new CommitAuditedSessionMutation(uncertain, () => NOW);
+    const request = input(200, kind);
+    await assert.rejects(useCase.execute(request), /connection lost after COMMIT/);
+    assert.equal(db.ops.size, 1);
+    assert.equal(db.outbox.size, 1);
+    assert.deepEqual(await useCase.execute(request), { ok: true, state: 'replayed' });
+    assert.equal(db.ops.size, 1);
+    assert.equal(db.outbox.size, 1);
+    assert.equal(db.userVersion, kind === 'revoke-all-sessions' ? 4 : 3);
+  }
+});
+
+test('retry após resposta perdida não reescreve data e conteúdo do evento original', async () => {
+  const db = new FakeDatabase();
+  assert.deepEqual(await commit(db).execute(input(201)),
+    { ok: true, state: 'committed' });
+  const original = structuredClone(db.outbox.get(uuid(201))?.event);
+  assert.deepEqual(await commit(db, '2026-11-04T22:10:00.000Z').execute(input(201)),
+    { ok: true, state: 'replayed' });
+  assert.deepEqual(db.outbox.get(uuid(201))?.event, original);
+  assert.equal(db.outbox.get(uuid(201))?.event.recordedAt, NOW);
+});
+
+test('mesmo ID após resposta perdida com payload modificado é conflito permanente', async () => {
+  const db = new FakeDatabase();
+  await commit(db).execute(input(202, 'revoke-all-sessions'));
+  for (const changed of [
+    { ...input(202, 'revoke-all-sessions'), expectedAuthVersion: 4 },
+    { ...input(202, 'revoke-session') },
+    { ...input(202, 'revoke-all-sessions'), correlationId: uuid(987) },
+    { ...input(202, 'revoke-all-sessions'), sessionHash: 'b'.repeat(64) },
+  ]) {
+    assert.deepEqual(await commit(db).execute(changed), { ok: false, error: 'conflict' });
+  }
+  assert.equal(db.userVersion, 4);
+  assert.equal(db.outbox.size, 1);
+});
+
+test('erro antes do COMMIT seguido de retry produz uma operação e um evento', async () => {
+  const db = new FakeDatabase();
+  db.auditWriteFails = true;
+  await assert.rejects(commit(db).execute(input(203)), /audit outbox INSERT failed/);
+  assert.equal(db.ops.size, 0);
+  assert.equal(db.outbox.size, 0);
+  assert.equal(db.activeSession, true);
+  db.auditWriteFails = false;
+  assert.deepEqual(await commit(db).execute(input(203)), { ok: true, state: 'committed' });
+  assert.equal(db.ops.size, 1);
+  assert.equal(db.outbox.size, 1);
+});
+
+test('20 retries concorrentes preservam apenas um COMMIT e um evento', async () => {
+  const db = new FakeDatabase();
+  const outcomes = await Promise.all(Array.from({ length: 20 },
+    () => commit(db).execute(input(204, 'revoke-all-sessions'))));
+  assert.equal(outcomes.filter(o => o.ok && o.state === 'committed').length, 1);
+  assert.equal(outcomes.filter(o => o.ok && o.state === 'replayed').length, 19);
+  assert.equal(db.userVersion, 4);
+  assert.equal(db.ops.size, 1);
+  assert.equal(db.outbox.size, 1);
+});
+
+test('ID diferentes disputando a mesma sessão não produzem eventos fantasmas', async () => {
+  const db = new FakeDatabase();
+  const requests = Array.from({ length: 12 }, (_, i) =>
+    commit(db).execute(input(300 + i)));
+  const results = await Promise.all(requests);
+  assert.equal(results.filter(r => r.ok).length, 1);
+  assert.equal(results.filter(r => !r.ok && r.error === 'conflict').length, 11);
+  assert.equal(db.outbox.size, 1);
+  assert.equal(db.ops.size, 1);
+  assert.equal(db.activeSession, false);
+});
+
+test('ACK do ledger confirmado mas resposta perdida não duplica evento no retry', async () => {
+  const db = new FakeDatabase();
+  seed(db, 401);
+  let dropReply = true;
+  const uncertain: AuditOutboxProjectionPort = {
+    claimDue: (...args) => db.claimDue(...args),
+    async finalizeClaim(...args) {
+      const state = await db.finalizeClaim(...args);
+      if (dropReply) { dropReply = false; throw new Error('lost ACK response'); }
+      return state;
+    },
+  };
+  await assert.rejects(new ProjectSecurityAuditOutbox(uncertain, () => NOW).runOnce(),
+    /lost ACK response/);
+  assert.equal(db.ledger.size, 1);
+  assert.equal(db.outbox.get(uuid(401))?.acknowledged, true);
+  assert.deepEqual(await new ProjectSecurityAuditOutbox(uncertain, () => NOW).runOnce(),
+    { ok: true, claimed: 0, stored: 0, replayed: 0, stale: 0 });
+  assert.equal(db.ledger.size, 1);
+});
+
+test('morte após claim sem ACK recupera registro após lease, fencing evita duplicata', async () => {
+  const db = new FakeDatabase();
+  seed(db, 402);
+  const leased = await db.claimDue(NOW, 1, 30_000);
+  assert.equal(leased.length, 1);
+  const later = new Date(Date.parse(NOW) + 30_001).toISOString();
+  assert.deepEqual(await project(db, later).runOnce(), {
+    ok: true, claimed: 1, stored: 1, replayed: 0, stale: 0,
+  });
+  assert.equal(await db.finalizeClaim(uuid(402), leased[0].leaseId, later), 'stale');
+  assert.equal(db.ledger.size, 1);
+});
+
+test('ledger previamente gravado com ACK perdido é confirmado sem duplicação', async () => {
+  const db = new FakeDatabase();
+  seed(db, 403);
+  const row = db.outbox.get(uuid(403));
+  assert.ok(row);
+  db.ledger.set(uuid(403), structuredClone(row.event));
+  const result = await project(db).runOnce();
+  assert.deepEqual(result, { ok: true, claimed: 1, stored: 0, replayed: 1, stale: 0 });
+  assert.equal(db.ledger.size, 1);
+  assert.equal(db.outbox.get(uuid(403))?.acknowledged, true);
+});
+
+test('adapters devolvendo estado não previsto falham explicitamente', async () => {
+  const malformedMutation: AtomicSecurityMutationPort = {
+    async applyWithAudit() { return 'maybe' as 'committed'; },
+  };
+  await assert.rejects(new CommitAuditedSessionMutation(malformedMutation, () => NOW)
+    .execute(input(404)), /unknown state/);
+  const db = new FakeDatabase();
+  seed(db, 404);
+  const malformedLedger: AuditOutboxProjectionPort = {
+    claimDue: (...args) => db.claimDue(...args),
+    async finalizeClaim() { return 'maybe' as 'stored'; },
+  };
+  await assert.rejects(new ProjectSecurityAuditOutbox(malformedLedger, () => NOW).runOnce(),
+    /unknown state/);
+  assert.equal(db.ledger.size, 0);
+  assert.equal(db.outbox.get(uuid(404))?.acknowledged, false);
+});
