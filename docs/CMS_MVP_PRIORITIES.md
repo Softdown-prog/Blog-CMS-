@@ -1,7 +1,7 @@
 # Blog CMS — critérios de utilidade e primeiro fluxo completo
 
 Data da revisão: 2026-11-05.
-Base revisada: `feat/cms-postgres-public-posts` em `b9eef7f`.
+Base revisada: `feat/cms-postgres-public-posts`, com leitura pública por slug.
 
 ## Regra antes de implementar
 
@@ -28,14 +28,16 @@ prontidão para produção.
 | Entrar e administrar | Regras de sessão e segurança sem login HTTP | `apps/api/src/security/`; `apps/api/src/app.module.ts` | Login real com sessão segura, CSRF/Origin, RBAC e logout |
 | Publicar artigo | Política interna, sem rota de escrita | `apps/api/src/editorial/application/commands.ts` | Editor/admin publica e o leitor consegue abrir o artigo completo |
 | Listar artigos públicos | Endpoint de listagem implementado, depende do banco | `apps/api/src/posts.controller.ts`; `posts.service.ts` | Consulta somente publicados, com paginação e tratamento de falhas |
-| Abrir artigo por endereço | Falta rota pública de detalhe | `apps/web/src/app/app.routes.ts` | `/posts/:slug` mostra artigo correto, escapado e acessível |
+| Abrir artigo por endereço | Rota pública e leitura por slug implementadas, dependem de PostgreSQL e conteúdo válido | `apps/api/src/posts.service.ts`; `apps/web/src/app/post-detail.component.ts` | HTTP 200/404/503, SQL parametrizado, texto escapado, testes desktop/mobile; validar também com dados reais antes da produção |
 | Categorias, tags, capa e mídias | Interfaces e contratos demonstrativos | `apps/web/src/app/admin-preview.component.ts` | Persistem associadas ao artigo, com permissões; podem vir depois do fluxo principal |
 | Upload, quotas, miniaturas | Somente contratos offline e testes com fakes | `apps/api/src/editorial/media-upload-*.ts` | Adiar até salvar/publicar funcionar e existir validação real de bytes |
 | Agendador, revisões, auditoria | Casos de uso e contratos testados, não integrados | `apps/api/src/editorial/application/`; `security/` | Habilitar apenas quando o fluxo correspondente for integrado e testado |
 
 O endpoint `GET /api/public/posts` não é uma lista falsa: consulta PostgreSQL
 quando configurado e retorna indisponibilidade quando não há conexão.
-A tela pública ainda não fornece navegação até um artigo completo.
+A lista pública agora oferece navegação para o artigo completo; o teste Angular
+simula respostas da API, e o teste NestJS exercita a rota HTTP real com banco
+falso. A publicação pelo painel continua bloqueada por falta de autenticação.
 
 ## Sequência mínima de maior valor
 
@@ -80,3 +82,18 @@ em banco descartável do Actions. Isso cobre uma parte do item 1, mas
 **lockfiles versionados, autenticação HTTP e conexão do Angular ainda
 estão pendentes**. Não registrar o adaptador no NestJS antes da fronteira
 de autenticação/CSRF. Ver `docs/POSTGRES.md`.
+
+## Leitura de artigo (implementada, sem deploy)
+
+- A API utiliza slug validado e SQL parametrizado e lê somente posts publicados
+  com data já efetiva. Ausência/slug inválido retorna HTTP 404; PostgreSQL
+  indisponível ou corpo editorial corrompido retorna HTTP 503 sem vazar driver.
+- O corpo JSONB é validado contra o contrato editorial v1 já existente. A
+  interface usa interpolação Angular, nunca `innerHTML`; referências de imagem
+  exibem ALT em texto enquanto o upload público não existir.
+- Testes unitários, HTTP real (NestJS com fake de banco) e Playwright
+  desktop/mobile cobrem navegação, XSS, erros e viewport. **Não substituem**
+  teste com PostgreSQL real populado com artigos publicados nem verificam login.
+- A criação, edição, publicação e fluxo de sessão continuam pendentes. Nenhuma
+  migration foi aplicada à VPS, e nenhuma funcionalidade administrativa foi
+  exposta sem autenticação.
