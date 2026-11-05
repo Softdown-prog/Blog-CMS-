@@ -208,3 +208,16 @@ abandonadas, estornos e limpeza de blobs órfãos com idempotência. Nenhuma
 dessas garantias foi afirmada como implementada ou testada em DB real.
 
 O contrato e o fake de testes **não substituem transações PostgreSQL**.
+
+## Fase 2F — ciclo de vida de reservas (contratos offline)
+
+Reservas possuem agora um TTL de 15 minutos. Uma porta transacional
+`MediaUploadLifecyclePort` define cancelamento autorizado, liberação
+de cotas, varredura limitada de expiradas e retenção de IDs tombstone.
+`BeginMediaUpload` trata explicitamente `cancelled` e `expired`
+como erros, não como reserva ativa. Os testes simulam múltiplos workers,
+respostas perdidas, ROLLBACK, concorrência e replay após o prazo.
+
+O teste é com fake em memória, não com PostgreSQL. O Angular continua
+sem enviar arquivos ou chamar serviços de upload. Nenhum worker está ativo.
+Ver `docs/MEDIA_UPLOAD_PREPARATION.md` para limites e próximas integrações.

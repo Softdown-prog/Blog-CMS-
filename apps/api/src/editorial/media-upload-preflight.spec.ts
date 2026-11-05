@@ -239,3 +239,22 @@ test('perfis de miniaturas são contratos sem upscaling, metadados ou URLs', () 
     assert.equal('url' in variant, false);
   }
 });
+
+test('tombstone de reserva cancelada ou expirada nunca libera upload em replay', async () => {
+  for (const terminal of ['cancelled', 'expired'] as const) {
+    const port: MediaUploadReservationPort = {
+      async reserveAtomically() { return terminal; },
+    };
+    assert.deepEqual(await new BeginMediaUpload(port).execute(actor, req()),
+      { ok: false, error: terminal });
+  }
+});
+
+test('clock não seguro não chama adaptador de reservas', async () => {
+  const db = new AtomicFake();
+  for (const value of [Number.NaN, -1, Number.POSITIVE_INFINITY, 8_640_000_000_000_000]) {
+    assert.deepEqual(await new BeginMediaUpload(db, () => value).execute(actor, req()),
+      { ok: false, error: 'invalid-clock' });
+  }
+  assert.equal(db.operations.size, 0);
+});

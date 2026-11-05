@@ -51,3 +51,36 @@ Testes determinísticos do contrato e de porta falsa atômica cobrem rejeição
 de dono diferente, MIME/extensão, tamanho, campos inesperados, quotas,
 concorrência, falha antes/depois de COMMIT e replay idempotente. Não medem
 streaming, segurança de decodificador, isolamento SQL nem quotas em produção.
+
+## Cancelamento, expiração e recuperação (contratos offline)
+
+O contrato `media-upload-lifecycle.ts` acrescenta:
+- Prazo **15 minutos** calculado no primeiro COMMIT da reserva pelo relógio confiável
+  passado ao adaptador. Um replay nunca renova esse prazo.
+- `CancelMediaUpload.execute` exige a identidade já autenticada do mesmo
+  proprietário e o `operationId`, sem aceitar campos extras ou ações
+  sobre reservas de outros usuários.
+- `ExpireMediaUploads.runOnce` executa apenas UMA varredura limitada (máximo
+  100 reservas por execução), usando o relógio do servidor. Não há cron,
+  worker, agendamento nem acesso a banco implementados.
+- `MediaUploadLifecyclePort` combina a mesma porta de reserva com
+  cancelamento e expiração atômicos: ambos mudam estado e devolvem quota
+  de bytes e contagem de arquivos em UM COMMIT.
+- Estados terminais `cancelled` e `expired` permanecem como
+  *tombstones*: `BeginMediaUpload` responde erro nessas duas condições,
+  não cria nova reserva com o mesmo ID; uma nova tentativa legítima deve
+  usar novo `operationId`.
+- Repetição de cancelamento confirmado retorna `replayed`; cancelamento
+  após prazo devolve `expired`; falha antes do COMMIT mantém a reserva.
+  Uma resposta perdida após COMMIT pode ser reconciliada por nova chamada,
+  sem segunda liberação.
+
+**Garantias ainda não demonstradas em produção:** isolamento SQL real,
+identidade/CSRF HTTP, retenção persistente dos tombstones, sincronização de
+relógio entre workers, limpeza de objetos em armazenamento, transição de
+reserva para mídia *realmente validada*, geração de miniaturas e relatórios
+de auditoria. Os testes executam um único fake serializável, inclusive nas
+simulações de concorrência. Nunca considerar contagem do fake como quota
+real do usuário. Antes da integração, dimensionar retenção de idempotência
+para que IDs antigos não possam ser reutilizados durante o período de
+retransmissões suportado.

@@ -10,6 +10,8 @@ import type { EditorialActor } from './policy';
 export const MEDIA_UPLOAD_MAX_FILE_BYTES = 20 * 1024 * 1024;
 export const MEDIA_UPLOAD_USER_QUOTA_BYTES = 100 * 1024 * 1024;
 export const MEDIA_UPLOAD_USER_MAX_FILES = 200;
+/** Reservation lease, calculated ONCE by the future atomic adapter. */
+export const MEDIA_UPLOAD_RESERVATION_TTL_MS = 15 * 60_000;
 
 export type UploadPreflightError =
   | 'invalid-input' | 'forbidden' | 'invalid-file'
