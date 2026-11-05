@@ -1,9 +1,14 @@
 import { Component, computed, signal } from '@angular/core';
 import {
-  WORKBENCH_BLOCK_LIMIT, createWorkbenchBlock, workbenchDocument,
+  WORKBENCH_BLOCK_LIMIT, createWorkbenchBlock, createWorkbenchImageBlock, workbenchDocument,
 } from '../../../api/src/editorial/editor-workbench';
 import type { WorkbenchBlock, WorkbenchBlockKind } from '../../../api/src/editorial/editor-workbench';
 import { reviewPublication } from '../../../api/src/editorial/publication-tools';
+import {
+  chooseFeaturedMedia, emptyFeaturedMedia, findMedia,
+  sampleMediaCatalog, updateMediaAlt,
+} from '../../../api/src/editorial/publication-media';
+import type { FeaturedMediaV1, MediaAssetV1, MediaCatalogV1 } from '../../../api/src/editorial/publication-media';
 import {
   addDraftTag, emptyDraftTaxonomy, parseDraftTaxonomy,
 } from '../../../api/src/editorial/publication-taxonomy';
@@ -37,6 +42,11 @@ export class AdminPreviewComponent {
   protected readonly taxonomy = signal<DraftTaxonomyV1>(emptyDraftTaxonomy());
   protected readonly tagDraft = signal('');
   protected readonly tagFeedback = signal<string | null>(null);
+  protected readonly mediaCatalog = signal<MediaCatalogV1>(sampleMediaCatalog());
+  protected readonly featuredMedia = signal<FeaturedMediaV1>(emptyFeaturedMedia());
+  protected readonly mediaFeedback = signal<string | null>(null);
+  protected readonly featuredAsset = computed(() =>
+    findMedia(this.mediaCatalog(), this.featuredMedia().mediaId));
   private nextBlockId = 3;
 
   protected readonly review = computed(() => {
@@ -55,7 +65,7 @@ export class AdminPreviewComponent {
 
   protected readonly canAddBlock = computed(() => this.blocks().length < WORKBENCH_BLOCK_LIMIT);
 
-  protected addBlock(kind: WorkbenchBlockKind): void {
+  protected addBlock(kind: Exclude<WorkbenchBlockKind, 'image'>): void {
     if (!this.canAddBlock()) return;
     const block = createWorkbenchBlock(this.nextBlockId++, kind);
     this.blocks.update(current => [...current, block]);
@@ -111,6 +121,44 @@ export class AdminPreviewComponent {
     this.tagFeedback.set(null);
   }
 
+  protected changeMediaAlt(id: string, value: string): void {
+    const result = updateMediaAlt(this.mediaCatalog(), id, value);
+    if (!result.ok) {
+      this.mediaFeedback.set('Descrição inválida; máximo de 180 caracteres.');
+      return;
+    }
+    this.mediaCatalog.set(result.value);
+    if (this.featuredMedia().mediaId === id && !value.trim()) {
+      this.featuredMedia.set(emptyFeaturedMedia());
+    }
+    this.mediaFeedback.set(null);
+  }
+
+  protected chooseCover(id: string | null): void {
+    const result = chooseFeaturedMedia(this.mediaCatalog(), id);
+    if (!result.ok) {
+      this.mediaFeedback.set('Selecione uma imagem com descrição alternativa.');
+      return;
+    }
+    this.featuredMedia.set(result.value);
+    this.mediaFeedback.set(null);
+  }
+
+  protected insertMediaInArticle(asset: MediaAssetV1): void {
+    if (!this.canAddBlock()) return;
+    try {
+      const block = createWorkbenchImageBlock(this.nextBlockId++, asset);
+      this.blocks.update(current => [...current, block]);
+      this.mediaFeedback.set(null);
+    } catch {
+      this.mediaFeedback.set('Antes de inserir a imagem, informe sua descrição.');
+    }
+  }
+
+  protected mediaDimensions(asset: MediaAssetV1): string {
+    return asset.width + ' × ' + asset.height + ' · ' + asset.mimeType;
+  }
+
   protected applySuggestedSlug(): void {
     const suggestion = this.review().suggestedSlug;
     if (suggestion) this.slug.set(suggestion);
@@ -127,6 +175,7 @@ export class AdminPreviewComponent {
       case 'paragraph': return 'Parágrafo';
       case 'quote': return 'Citação';
       case 'list': return 'Lista';
+      case 'image': return 'Imagem';
     }
   }
 
@@ -136,6 +185,7 @@ export class AdminPreviewComponent {
       case 'paragraph': return 5000;
       case 'quote': return 2000;
       case 'list': return 14000;
+      case 'image': return 180;
     }
   }
 

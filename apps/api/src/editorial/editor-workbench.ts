@@ -1,24 +1,37 @@
 import { parseEditorialDocument } from './document';
+import { parseMediaAsset } from './publication-media';
+import type { MediaAssetV1 } from './publication-media';
 import type { EditorialDocumentV1, EditorialBlock } from './document';
 
-export type WorkbenchBlockKind = 'paragraph' | 'heading' | 'quote' | 'list';
+export type WorkbenchBlockKind = 'paragraph' | 'heading' | 'quote' | 'list' | 'image';
 
 export interface WorkbenchBlock {
   readonly id: number;
   readonly kind: WorkbenchBlockKind;
   readonly text: string;
   readonly level: 2 | 3;
+  readonly mediaId?: string;
 }
 
 export const WORKBENCH_BLOCK_LIMIT = 200;
 
 /** Pure helpers shared by Angular and the CMS API; never store HTML. */
-export function createWorkbenchBlock(id: number, kind: WorkbenchBlockKind): WorkbenchBlock {
+export function createWorkbenchBlock(
+  id: number, kind: Exclude<WorkbenchBlockKind, 'image'>,
+): WorkbenchBlock {
   if (!Number.isSafeInteger(id) || id < 1) throw new Error('Invalid local block ID');
   if (!['paragraph', 'heading', 'quote', 'list'].includes(kind)) {
     throw new Error('Unsupported workbench block kind');
   }
   return { id, kind, text: '', level: 2 };
+}
+
+/** Creates a local reference, not an image file or permanent association. */
+export function createWorkbenchImageBlock(id: number, source: MediaAssetV1): WorkbenchBlock {
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error('Invalid local block ID');
+  const asset = parseMediaAsset(source);
+  if (!asset.alt.trim()) throw new Error('Image needs alternative text');
+  return { id, kind: 'image', text: asset.alt, level: 2, mediaId: asset.id };
 }
 
 /**
@@ -39,6 +52,10 @@ export function workbenchDocument(blocks: readonly WorkbenchBlock[]): EditorialD
       case 'paragraph': return { type: 'paragraph', text: block.text };
       case 'heading': return { type: 'heading', level: block.level, text: block.text };
       case 'quote': return { type: 'quote', text: block.text };
+      case 'image': {
+        if (typeof block.mediaId !== 'string') throw new Error('Image without media ID');
+        return { type: 'image', mediaId: block.mediaId, alt: block.text };
+      }
       case 'list': return {
         type: 'list',
         items: block.text.split(/\r?\n/u).filter((line: string) => line.trim().length > 0),

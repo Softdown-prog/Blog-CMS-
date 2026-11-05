@@ -96,11 +96,64 @@
         </ul>
       </section>
 
+
+      <section class="media-panel" aria-labelledby="media-library-title">
+        <div class="panel-head">
+          <div>
+            <h3 id="media-library-title">Biblioteca de mídias</h3>
+            <p class="hint">Três exemplos de metadados, sem arquivos reais e sem upload.</p>
+          </div>
+          <span class="state-tag">Offline</span>
+        </div>
+        <div data-testid="media-catalog" class="media-grid">
+          @for (asset of mediaCatalog().items; track asset.id) {
+            <div class="media-item" [attr.data-testid]="'media-item-' + $index">
+              <div class="media-placeholder" role="img"
+                [attr.aria-label]="'Arquivo de demonstração, sem imagem carregada: ' + asset.filename">
+                <span aria-hidden="true">▧</span>
+                <small>Sem arquivo de imagem</small>
+              </div>
+              <strong class="media-filename">{{ asset.filename }}</strong>
+              <small class="hint">{{ mediaDimensions(asset) }}</small>
+              <div class="field">
+                <label [for]="'media-alt-' + $index">Descrição alternativa</label>
+                <textarea [id]="'media-alt-' + $index"
+                  [attr.data-testid]="'media-alt-' + $index"
+                  [attr.maxlength]="180"
+                  #assetAlt [value]="asset.alt" rows="2"
+                  (input)="changeMediaAlt(asset.id, assetAlt.value)"></textarea>
+              </div>
+              <div class="media-actions">
+                <button type="button" [attr.data-testid]="'media-cover-' + $index"
+                  [disabled]="!asset.alt.trim()"
+                  (click)="chooseCover(asset.id)">Usar como capa</button>
+                <button type="button" [attr.data-testid]="'media-insert-' + $index"
+                  [disabled]="!asset.alt.trim() || !canAddBlock()"
+                  (click)="insertMediaInArticle(asset)">Inserir no artigo</button>
+              </div>
+            </div>
+          }
+        </div>
+        @if (featuredAsset()) {
+          <div class="selected-cover" data-testid="selected-cover" role="status">
+            Capa selecionada: <strong>{{ featuredAsset()?.filename }}</strong>
+            <button type="button" class="remove-action" data-testid="remove-cover"
+              (click)="chooseCover(null)">Remover capa</button>
+          </div>
+        }
+        @if (mediaFeedback()) {
+          <p role="alert" data-testid="media-feedback" class="tag-feedback">{{ mediaFeedback() }}</p>
+        }
+      </section>
+
       <h3 class="block-heading">Blocos do artigo</h3>
       <div class="editor-blocks">
         @for (block of blocks(); track block.id) {
           <fieldset class="edit-block" [attr.data-testid]="'editor-block-' + block.id">
             <legend>{{ blockName(block.kind) }} {{ $index + 1 }}</legend>
+            @if (block.kind === 'image') {
+              <p class="hint">Imagem vinculada ao rascunho: {{ block.mediaId }}. O arquivo não está disponível.</p>
+            }
             @if (block.kind === 'heading') {
               <label class="sr-only" [for]="'heading-level-' + block.id">Nível do subtítulo</label>
               <select [id]="'heading-level-' + block.id" #headingLevel
@@ -109,7 +162,9 @@
                 <option value="3">Título H3</option>
               </select>
             }
-            <label class="sr-only" [for]="'block-text-' + block.id">Conteúdo do bloco {{ $index + 1 }}</label>
+            <label class="sr-only" [for]="'block-text-' + block.id">
+              {{ block.kind === 'image' ? 'Descrição alternativa da imagem' : 'Conteúdo do bloco' }} {{ $index + 1 }}
+            </label>
             <textarea [id]="'block-text-' + block.id" #blockText
               [value]="block.text" [attr.maxlength]="blockLength(block.kind)"
               [attr.aria-label]="blockName(block.kind)"
@@ -190,6 +245,15 @@
                 Categoria: {{ taxonomy().category }}
               </p>
             }
+            @if (featuredAsset(); as cover) {
+              <figure class="preview-image" data-testid="featured-preview">
+                <div class="media-placeholder" role="img"
+                  [attr.aria-label]="'Capa de demonstração: ' + cover.alt">
+                  Imagem não carregada
+                </div>
+                <figcaption>Capa: {{ cover.filename }} · {{ cover.alt }}</figcaption>
+              </figure>
+            }
             <h3>{{ title() || 'Título do artigo' }}</h3>
             @if (taxonomy().tags.length > 0) {
               <ul class="preview-tags" data-testid="preview-tags" aria-label="Marcadores da publicação">
@@ -211,6 +275,15 @@
                   <ul>
                     @for (item of listItems(block.text); track $index) { <li>{{ item }}</li> }
                   </ul>
+                }
+                @case ('image') {
+                  <figure class="preview-image" data-testid="inline-image-preview">
+                    <div class="media-placeholder" role="img"
+                      [attr.aria-label]="'Imagem de demonstração: ' + block.text">
+                      Imagem não carregada
+                    </div>
+                    <figcaption>{{ block.text }}</figcaption>
+                  </figure>
                 }
               }
             }

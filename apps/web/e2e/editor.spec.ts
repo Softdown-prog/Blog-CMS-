@@ -154,3 +154,70 @@ test('categoria e tags são descartadas após reload e não causam requests', as
   await expect(page.getByTestId('preview-category')).toHaveCount(0);
 });
 
+
+test('biblioteca demonstra três registros sem carregar imagens, permite escolher e retirar capa', async ({ page }) => {
+  await expect(page.getByTestId('media-catalog').locator('.media-item')).toHaveCount(3);
+  await expect(page.getByTestId('media-catalog').locator('img')).toHaveCount(0);
+  await page.getByTestId('media-cover-0').click();
+  await expect(page.getByTestId('selected-cover')).toContainText('capa-editorial.webp');
+  await expect(page.getByTestId('featured-preview')).toContainText('Bancada de edição');
+  await page.getByTestId('remove-cover').click();
+  await expect(page.getByTestId('featured-preview')).toHaveCount(0);
+  await expect(page.getByTestId('selected-cover')).toHaveCount(0);
+});
+
+test('edição de descrição altera capa, mas apagar ALT exige nova seleção', async ({ page }) => {
+  await page.getByTestId('media-cover-0').click();
+  await page.getByTestId('media-alt-0').fill('Uma descrição nova');
+  await expect(page.getByTestId('featured-preview')).toContainText('Uma descrição nova');
+  await page.getByTestId('media-alt-0').fill('');
+  await expect(page.getByTestId('media-cover-0')).toBeDisabled();
+  await expect(page.getByTestId('selected-cover')).toHaveCount(0);
+  await page.getByTestId('media-alt-0').fill('Capa acessível');
+  await expect(page.getByTestId('media-cover-0')).toBeEnabled();
+  await page.getByTestId('media-cover-0').click();
+  await expect(page.getByTestId('featured-preview')).toContainText('Capa acessível');
+});
+
+test('inserir imagem gera bloco editorial e contabiliza imagem sem upload', async ({ page }) => {
+  await page.getByTestId('media-insert-1').click();
+  await expect(page.getByTestId('inline-image-preview')).toHaveCount(1);
+  await expect(page.getByTestId('image-count')).toHaveText('1');
+  await expect(page.getByTestId('inline-image-preview')).toContainText('Caderno aberto');
+  await expect(page.getByTestId('inline-image-preview').locator('img')).toHaveCount(0);
+  await page.locator('#block-text-3').fill('');
+  await expect(page.getByTestId('editor-notices')).toContainText('Descreva a imagem');
+  await page.getByRole('button', { name: 'Remover bloco 3' }).click();
+  await expect(page.getByTestId('image-count')).toHaveText('0');
+});
+
+test('imagem sem ALT não pode ser usada até correção; HTML continua texto escapado', async ({ page }) => {
+  const payload = '<img src=x onerror="window.__mediaXss = 1">';
+  await expect(page.getByTestId('media-insert-2')).toBeDisabled();
+  await expect(page.getByTestId('media-cover-2')).toBeDisabled();
+  await page.getByTestId('media-alt-2').fill(payload);
+  await page.getByTestId('media-insert-2').click();
+  await expect(page.getByTestId('image-count')).toHaveText('1');
+  await expect(page.getByTestId('inline-image-preview')).toContainText(payload);
+  await expect(page.locator('img')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as Window & { __mediaXss?: number }).__mediaXss))
+    .toBeUndefined();
+});
+
+test('capa e blocos com imagem desaparecem após recarregar, sem chamadas API', async ({ page }) => {
+  const unexpected: string[] = [];
+  page.on('request', request => {
+    if (request.method() !== 'GET' || new URL(request.url()).pathname.startsWith('/api/')) {
+      unexpected.push(request.method() + ' ' + request.url());
+    }
+  });
+  await page.getByTestId('media-cover-0').click();
+  await page.getByTestId('media-insert-0').click();
+  await expect(page.getByTestId('image-count')).toHaveText('1');
+  expect(unexpected).toEqual([]);
+  await page.reload();
+  await expect(page.getByTestId('selected-cover')).toHaveCount(0);
+  await expect(page.getByTestId('inline-image-preview')).toHaveCount(0);
+  await expect(page.getByTestId('image-count')).toHaveText('0');
+  expect(unexpected).toEqual([]);
+});

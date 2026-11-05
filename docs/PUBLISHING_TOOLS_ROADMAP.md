@@ -149,3 +149,26 @@ autenticação ou endpoints.** Antes de persistir, definir tabela normalizada
 de termos, aliases/slugs, relações post-termo e autorização/RBAC com
 compare-and-swap de revisão. Nunca confiar apenas na lista de categorias
 da interface.
+
+## Fase 2D — biblioteca de mídias de demonstração (branch)
+
+Foi criado o contrato puro apps/api/src/editorial/publication-media.ts,
+que valida UUID, extensão/MIME, tamanho, resolução, texto alternativo,
+duplicatas, versão e campos exatos. O catálogo possui três registros
+ilustrativos, SEM bytes de imagem, URL, preview real ou upload.
+
+O Angular agora oferece listagem de metadados, edição de texto alternativo,
+escolha/remoção de capa e inserção de bloco de imagem no artigo v1.
+A prévia mostra claramente um placeholder, jamais inventa um arquivo.
+A alteração de ALT de um bloco inserido não altera o catálogo original.
+A capa só pode referenciar uma mídia do catálogo com ALT preenchido.
+
+Regras futuras para upload real (NÃO implementadas): RBAC e propriedade;
+verificação de bytes mágicos e decodificação segura, não confiar em MIME
+do cliente; cotas, antivírus quando cabível, proteção contra bombas de
+descompressão, metadados EXIF, thumbnails, URLs e storage seguros,
+limpeza e auditoria; CAS de revisão para associar imagem ao artigo.
+A validação atual é apenas dos METADADOS declarados por fixtures.
+
+Testes de domínio, Angular AOT/SAC e Playwright desktop/mobile emulado
+devem confirmar a interface antes de integrar backend e PostgreSQL.
