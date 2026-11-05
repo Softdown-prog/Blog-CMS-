@@ -95,7 +95,7 @@ function parsedCookies(request: HttpRequest, name: string): string | undefined {
   return token && /^[A-Za-z0-9_-]+$/.test(token) ? token : undefined;
 }
 
-function credentials(request: HttpRequest): AdminCredentialInput {
+export function credentials(request: HttpRequest): AdminCredentialInput {
   return {
     sessionToken: parsedCookies(request, SESSION_COOKIE),
     csrfHeader: request.headers['x-cms-csrf'],

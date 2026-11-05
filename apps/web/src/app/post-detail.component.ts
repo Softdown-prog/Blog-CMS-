@@ -3,7 +3,8 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError, distinctUntilChanged, map, of, startWith, switchMap } from 'rxjs';
+import { SiteWidgetsComponent } from './site-widgets.component';
+import { catchError, distinctUntilChanged, map, of, startWith, switchMap, tap } from 'rxjs';
 
 type ArticleBlock =
   | Readonly<{ type: 'paragraph'; text: string }>
@@ -30,10 +31,10 @@ type ArticleState =
 @Component({
   selector: 'blog-post-detail',
   standalone: true,
-  imports: [RouterLink, DatePipe],
+  imports: [RouterLink, DatePipe, SiteWidgetsComponent],
   template: `
     <section class="container">
-      <a routerLink="/" class="back-link">Voltar ao blog</a>
+      <a [routerLink]="isPage ? '/pages' : '/'" class="back-link">{{ isPage ? 'Voltar às páginas' : 'Voltar ao blog' }}</a>
       @if (state(); as current) {
         @if (current.status === 'loading') {
           <p class="panel" aria-live="polite">Carregando artigo…</p>
@@ -46,7 +47,7 @@ type ArticleState =
         } @else {
           <article class="public-article">
             <header>
-              <p class="eyebrow">ARTIGO</p>
+              <p class="eyebrow">{{ isPage ? 'PÁGINA' : 'ARTIGO' }}</p>
               <h1>{{ current.post.title }}</h1>
               <p class="article-meta">
                 Publicado em
@@ -86,20 +87,28 @@ type ArticleState =
           </article>
         }
       }
+      <blog-site-widgets />
     </section>
   `,
 })
 export class PostDetailComponent {
   private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
+  protected readonly isPage = this.route.snapshot.data['kind'] === 'page';
 
   protected readonly state = toSignal(
     this.route.paramMap.pipe(
       map((parameters) => parameters.get('slug') ?? ''),
       distinctUntilChanged(),
       switchMap((slug) => this.http.get<PublicArticle>(
-        '/api/public/posts/' + encodeURIComponent(slug),
+        (this.isPage ? '/api/public/pages/' : '/api/public/posts/') + encodeURIComponent(slug),
       ).pipe(
+        tap(post => {
+          if (!this.isPage) {
+            this.http.post('/api/public/posts/' + encodeURIComponent(post.slug) + '/view', null)
+              .subscribe({ error: () => { /* Métricas opcionais */ } });
+          }
+        }),
         map((post): ArticleState => ({ status: 'ready', post })),
         catchError((error: unknown) => of<ArticleState>({
           status: error instanceof HttpErrorResponse && error.status === 404 ? 'not-found' : 'error',

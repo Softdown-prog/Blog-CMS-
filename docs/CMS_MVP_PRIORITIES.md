@@ -117,3 +117,16 @@ de autenticação/CSRF. Ver `docs/POSTGRES.md`.
   migração de banco povoado, alinhamento de proxy/IP confiável, retenção de
   tentativas/sessões, lockfiles, controles de cabeçalhos e homologação mobile
   com a API real. NÃO executar 003 na VPS sem autorização e revisão.
+
+## Páginas fixas e organização da interface
+
+Páginas instrucionais e postagens possuem `content_kind` diferente no banco,
+rotas públicas distintas e widgets nativos configuráveis. A leitura e as opções
+administrativas estão implementadas na branch, ainda sem deploy. Widgets
+disponíveis: últimas postagens, mais populares (somente visitas reais),
+atalhos de páginas e texto simples. Não executar 004 na VPS sem homologação.
+Ver [CONTENT_LAYOUT_PROPOSAL.md](CONTENT_LAYOUT_PROPOSAL.md).
+
+Continuam faltando salvamento/publicação real pelo Angular, retenção de
+impressões, revisão LGPD, configuração de IP confiável no Caddy, lockfiles
+estáveis e homologação de segurança.
