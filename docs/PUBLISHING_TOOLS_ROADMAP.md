@@ -1,5 +1,12 @@
 # Ferramentas de publicação — pesquisa e plano técnico
 
+> **Critério vigente:** consultar [CMS_MVP_PRIORITIES.md](CMS_MVP_PRIORITIES.md)
+> antes de iniciar qualquer módulo. O fluxo salvar/publicar/ler é mais urgente
+> que ampliar contratos auxiliares. As seções abaixo registram evolução
+> histórica; alguns itens antigos marcados como "planejado" já existem como
+> protótipos em memória, **não** como recursos integrados.
+
+
 ## Princípio
 
 Construir um CMS útil para publicar textos e imagens, não apenas um backend de
@@ -172,3 +179,52 @@ A validação atual é apenas dos METADADOS declarados por fixtures.
 
 Testes de domínio, Angular AOT/SAC e Playwright desktop/mobile emulado
 devem confirmar a interface antes de integrar backend e PostgreSQL.
+
+## Fase 2E — pré-upload seguro (contratos offline)
+
+Foi criado `apps/api/src/editorial/media-upload-preflight.ts` com uma
+fronteira de **intenção de reserva**, e não de upload de arquivos. O autor,
+editor ou administrador autenticado poderá reservar espaço **somente para
+o próprio ownerId**, sempre derivado e conferido com identidade confiável
+da camada de autenticação futura. A interface Angular pública não usa o
+módulo para conceder acesso.
+
+- Formatos declarados aceitos: JPEG, PNG, WebP e AVIF; extensão deve combinar
+  com MIME informado. HTML, SVG, URLs e caminhos são recusados.
+- Máximo declarado por arquivo: **20 MiB**; cota projetada: **100 MiB e 200
+  arquivos** por usuário, incluindo reservas pendentes. Os valores ainda
+  são política provisória, ajustável antes da implantação.
+- `operationId` é UUID idempotente e só vale com o usuário e os mesmos
+  argumentos. O adaptador futuro precisa persistir o resultado, conferir
+  colisões e aplicar cotas em transação com locks/concorrência.
+- Resposta de sucesso confirma apenas uma **reserva offline**:
+  `uploadEnabled:false`, sem URL, credenciais, token ou bytes. Os testes
+  simulam COMMIT com resposta perdida, replay, conflitos e concorrência.
+- Dois **perfis declarativos** para thumbnails WebP, bordas máximas 320/960,
+  sem ampliação e com remoção de metadados. Não há worker, decoder ou arquivos
+  derivados ainda.
+
+**Limites essenciais:** nomes, tipos e tamanhos são apenas alegações do
+cliente. O adaptador de entrada deve verificar tamanho em fluxo, assinatura
+binária e decodificação isolada com limites de pixels/memória/tempo;
+reencodar/strip EXIF e gerar thumbnails com bibliotecas atualizadas;
+proteger contra conteúdo poliglota, bombas de descompressão, SVG ativo,
+SSRF e vazamento de dados; executar autorização/CSRF, propriedade e cota
+novamente na gravação. A futura API precisa tratar reservas expiradas,
+abandonadas, estornos e limpeza de blobs órfãos com idempotência. Nenhuma
+dessas garantias foi afirmada como implementada ou testada em DB real.
+
+O contrato e o fake de testes **não substituem transações PostgreSQL**.
+
+## Fase 2F — ciclo de vida de reservas (contratos offline)
+
+Reservas possuem agora um TTL de 15 minutos. Uma porta transacional
+`MediaUploadLifecyclePort` define cancelamento autorizado, liberação
+de cotas, varredura limitada de expiradas e retenção de IDs tombstone.
+`BeginMediaUpload` trata explicitamente `cancelled` e `expired`
+como erros, não como reserva ativa. Os testes simulam múltiplos workers,
+respostas perdidas, ROLLBACK, concorrência e replay após o prazo.
+
+O teste é com fake em memória, não com PostgreSQL. O Angular continua
+sem enviar arquivos ou chamar serviços de upload. Nenhum worker está ativo.
+Ver `docs/MEDIA_UPLOAD_PREPARATION.md` para limites e próximas integrações.

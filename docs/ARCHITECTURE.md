@@ -25,3 +25,8 @@ Na fase de produção, Caddy existente -> Angular -> API NestJS -> banco exclusi
 ## Verificação
 \`npm test --prefix apps/api\` executa os testes da leitura pública e do domínio. O GitHub Actions continua usando SAC pre/build/post do Data_libray, **sem autorização de deploy**. Testes de navegador e integração real ainda precisam ser construídos.
 
+
+## Critério de valor do produto
+
+Priorizar escrever, salvar, publicar e ler de ponta a ponta em vez de acumular
+contratos demonstrativos. Ver [CMS_MVP_PRIORITIES.md](CMS_MVP_PRIORITIES.md).

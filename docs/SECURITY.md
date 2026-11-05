@@ -32,3 +32,11 @@ Os contratos de idempotência, outbox e projeção do ledger foram preparados em
 ## Emissão e rotação com auditoria obrigatória (contratos offline)
 
 `SessionLifecycle.createWithAudit` e `rotateWithAudit` vinculam a alteração da sessão ao evento na outbox, sem inserir credenciais em registros. O adaptador PostgreSQL futuro ainda precisa demonstrar atomicidade, idempotência e concorrência real. Sem HTTP ou worker ativo.
+
+## Preparação de uploads de mídia
+
+Somente pré-validação e reserva simulada, sem ativação de endpoint, streams,
+storage ou downloads. O cliente NÃO é confiável para MIME, dimensão ou bytes.
+A gravação futura deve autenticar sessão + CSRF/Origin, verificar propriedade,
+cotas sob transação e examinar/decodificar bytes em sandbox antes de permitir
+publicação. Ver [MEDIA_UPLOAD_PREPARATION.md](MEDIA_UPLOAD_PREPARATION.md).
