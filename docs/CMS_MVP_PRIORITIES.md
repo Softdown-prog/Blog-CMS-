@@ -71,3 +71,12 @@ Até isso acontecer, não anunciar "CMS completo" com base no número de testes.
 Não introduzir sistemas de plugins, marketplaces, AI/SEO automático,
 analytics avançado, novos bancos, frameworks ou microserviços sem uma
 necessidade demonstrada.
+
+## Progresso da base PostgreSQL (sem publicar)
+
+O adaptador `PgEditorialRepository` e os testes SQL foram adicionados
+para exercitar os mesmos casos de uso existentes contra Postgres 18 real
+em banco descartável do Actions. Isso cobre uma parte do item 1, mas
+**lockfiles versionados, autenticação HTTP e conexão do Angular ainda
+estão pendentes**. Não registrar o adaptador no NestJS antes da fronteira
+de autenticação/CSRF. Ver `docs/POSTGRES.md`.

@@ -11,6 +11,20 @@ jobs:
     # Bootstrap no runner descartável: não consumir RAM da VPS antes da homologação.
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: cms_test
+          POSTGRES_PASSWORD: cms_ci_only
+          POSTGRES_DB: blog_cms_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cms_test -d blog_cms_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout CMS
         uses: actions/checkout@v4
@@ -37,6 +51,10 @@ jobs:
         run: npm run build --prefix apps/api
       - name: Testes do backend (consultas PostgreSQL simuladas)
         run: npm test --prefix apps/api
+      - name: PostgreSQL 18 descartável - migrations, transações e concorrência
+        env:
+          PG_INTEGRATION_URL: postgres://cms_test:cms_ci_only@127.0.0.1:5432/blog_cms_ci
+        run: npm run test:postgres --prefix apps/api
       - name: Instalar ferramentas SAC isoladas
         run: |
           npm ci --prefix _sac/packages/angular-core --ignore-scripts --no-audit --no-fund

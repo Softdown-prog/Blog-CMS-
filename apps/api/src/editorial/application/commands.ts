@@ -134,7 +134,7 @@ export class EditorialCommands {
     if (!parsed.ok) return parsed;
 
     const next: EditorialPost = { ...current, ...parsed.value, revision: current.revision + 1 };
-    const outcome = await this.repo.compareAndSave(next, input.expectedRevision);
+    const outcome = await this.repo.compareAndSave(next, input.expectedRevision, actor.id);
     if (outcome === 'duplicate-slug') return reject('duplicate-slug');
     return outcome === 'updated' ? accept(next) : reject('stale-revision');
   }
@@ -162,7 +162,7 @@ export class EditorialCommands {
       publishedAt: decision.nextPublishedAt,
       revision: current.revision + 1,
     };
-    const outcome = await this.repo.compareAndSave(next, input.expectedRevision);
+    const outcome = await this.repo.compareAndSave(next, input.expectedRevision, actor.id);
     return outcome === 'updated' ? accept(next)
       : reject(outcome === 'duplicate-slug' ? 'duplicate-slug' : 'stale-revision');
   }
@@ -196,7 +196,7 @@ export class EditorialCommands {
       publishedAt: decision.nextPublishedAt,
       revision: current.revision + 1,
     };
-    const outcome = await this.repo.compareAndSave(next, input.expectedRevision);
+    const outcome = await this.repo.compareAndSave(next, input.expectedRevision, actor.id);
     return outcome === 'updated' ? accept(next)
       : reject(outcome === 'duplicate-slug' ? 'duplicate-slug' : 'stale-revision');
   }
@@ -222,7 +222,7 @@ export class EditorialCommands {
       publishedAt: decision.nextPublishedAt,
       revision: current.revision + 1,
     };
-    const outcome = await this.repo.compareAndSave(next, input.expectedRevision);
+    const outcome = await this.repo.compareAndSave(next, input.expectedRevision, actor.id);
     return outcome === 'updated' ? accept(next)
       : reject(outcome === 'duplicate-slug' ? 'duplicate-slug' : 'stale-revision');
   }
