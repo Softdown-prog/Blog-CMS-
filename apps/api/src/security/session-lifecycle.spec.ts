@@ -359,13 +359,18 @@ test('somente autenticação atual permite ações de ciclo de vida', async () =
 
 
 
+const auditEvents = (
+  ctx: ReturnType<typeof context>, type: SecurityAuditEvent['type'],
+): SecurityAuditEvent[] => [...ctx.store.auditOutbox.values()].filter(event => event.type === type);
+
 test('logout grava revogação e evento tipado na mesma operação', async () => {
   const ctx = context();
   const session = await issue(ctx);
   assert.deepEqual(await ctx.lifecycle.logout(credentials(session)), { ok: true });
-  assert.equal(ctx.store.auditOutbox.size, 1);
+  assert.equal(auditEvents(ctx, 'session-issued').length, 1);
+  assert.equal(auditEvents(ctx, 'session-revoked').length, 1);
   assert.equal(ctx.store.operations.size, 1);
-  const event = [...ctx.store.auditOutbox.values()][0];
+  const event = auditEvents(ctx, 'session-revoked')[0];
   assert.equal(event?.type, 'session-revoked');
   assert.deepEqual(event?.subject, { kind: 'user', userId: USER });
   assert.equal(event?.correlationId.length, 36);
@@ -379,8 +384,9 @@ test('revogação global cria um evento e invalida sessões por authVersion', as
   const first = await issue(ctx);
   await issue(ctx);
   assert.deepEqual(await ctx.lifecycle.invalidateAll(credentials(first)), { ok: true });
-  assert.equal(ctx.store.auditOutbox.size, 1);
-  const event = [...ctx.store.auditOutbox.values()][0];
+  assert.equal(auditEvents(ctx, 'session-issued').length, 2);
+  assert.equal(auditEvents(ctx, 'sessions-revoked-all').length, 1);
+  const event = auditEvents(ctx, 'sessions-revoked-all')[0];
   assert.equal(event?.type, 'sessions-revoked-all');
   assert.equal(ctx.store.user?.authVersion, 4);
 });
@@ -391,12 +397,13 @@ test('falha ao registrar outbox reverte revogação de sessão e permite retry',
   ctx.store.failAuditInsert = true;
   await assert.rejects(ctx.lifecycle.logout(credentials(c)), /outbox insert failed/);
   assert.equal(ctx.store.revocations, 0);
-  assert.equal(ctx.store.auditOutbox.size, 0);
+  assert.equal(auditEvents(ctx, 'session-issued').length, 1);
+  assert.equal(auditEvents(ctx, 'session-revoked').length, 0);
   assert.equal(ctx.store.operations.size, 0);
   assert.equal((await ctx.access.authorize('list-posts', { sessionToken: c.sessionToken })).ok, true);
   ctx.store.failAuditInsert = false;
   assert.deepEqual(await ctx.lifecycle.logout(credentials(c)), { ok: true });
-  assert.equal(ctx.store.auditOutbox.size, 1);
+  assert.equal(auditEvents(ctx, 'session-revoked').length, 1);
 });
 
 test('falha na auditoria impede incremento global de authVersion', async () => {
@@ -405,7 +412,8 @@ test('falha na auditoria impede incremento global de authVersion', async () => {
   ctx.store.failAuditInsert = true;
   await assert.rejects(ctx.lifecycle.invalidateAll(credentials(c)), /outbox insert failed/);
   assert.equal(ctx.store.user?.authVersion, 3);
-  assert.equal(ctx.store.auditOutbox.size, 0);
+  assert.equal(auditEvents(ctx, 'session-issued').length, 1);
+  assert.equal(auditEvents(ctx, 'sessions-revoked-all').length, 0);
   assert.equal((await ctx.access.authorize('list-posts', { sessionToken: c.sessionToken })).ok, true);
 });
 
@@ -420,7 +428,9 @@ test('CSRF ausente ou Origin incorreta não chega à porta auditada', async () =
     assert.deepEqual(await ctx.lifecycle.invalidateAll(input), { ok: false, error: 'csrf-rejected' });
   }
   assert.equal(ctx.store.auditedCalls, 0);
-  assert.equal(ctx.store.auditOutbox.size, 0);
+  assert.equal(auditEvents(ctx, 'session-issued').length, 1);
+  assert.equal(auditEvents(ctx, 'session-revoked').length, 0);
+  assert.equal(auditEvents(ctx, 'sessions-revoked-all').length, 0);
 });
 
 test('duas chamadas concorrentes de logout não geram duas revogações ou eventos', async () => {
@@ -432,7 +442,8 @@ test('duas chamadas concorrentes de logout não geram duas revogações ou event
   ]);
   assert.equal(results.filter(x => x.ok).length, 1);
   assert.equal(ctx.store.revocations, 1);
-  assert.equal(ctx.store.auditOutbox.size, 1);
+  assert.equal(auditEvents(ctx, 'session-issued').length, 1);
+  assert.equal(auditEvents(ctx, 'session-revoked').length, 1);
 });
 
 test('conflito na versão da sessão não grava evento de revogação global', async () => {
@@ -444,7 +455,8 @@ test('conflito na versão da sessão não grava evento de revogação global', a
   };
   assert.deepEqual(await ctx.lifecycle.invalidateAll(credentials(c)),
     { ok: false, error: 'conflict' });
-  assert.equal(ctx.store.auditOutbox.size, 0);
+  assert.equal(auditEvents(ctx, 'session-issued').length, 1);
+  assert.equal(auditEvents(ctx, 'sessions-revoked-all').length, 0);
   assert.equal(ctx.store.operations.size, 0);
 });
 
