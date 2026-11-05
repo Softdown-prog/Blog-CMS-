@@ -26,3 +26,10 @@ footer { padding: 2rem 1rem; text-align: center; color: #61728a; }
 .article-body blockquote { margin: 1.5rem 0; padding: .25rem 1.25rem; border-left: 4px solid #3977ad; background: #f4f7fb; }
 .article-body li { margin: .3rem 0; }
 .article-media-placeholder { border: 1px dashed #b7c6d7; padding: 1rem; color: #546479; }
+
+.login-page { max-width: 580px; }
+.login-form { display: flex; flex-direction: column; gap: .85rem; }
+.login-form input { width: 100%; min-height: 44px; border: 1px solid #a3b3c4; border-radius: .4rem; padding: .65rem; font: inherit; }
+.login-form button { margin-top: .5rem; min-height: 44px; }
+.admin-session-bar { min-height: unset; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 0; }
+.admin-session-bar p { margin: .25rem 0; }

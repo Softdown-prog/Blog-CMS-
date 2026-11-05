@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/api/admin/session', async route => {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ user: { id: '839e6d28-2466-46df-b8e7-425d05a2178b', role: 'editor' } }) });
+  });
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: 'Ferramentas de publicação' })).toBeVisible();
   await expect(page.getByTestId('workbench-offline')).toContainText('nada é salvo');
