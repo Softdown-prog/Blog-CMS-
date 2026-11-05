@@ -41,7 +41,7 @@ export function workbenchDocument(blocks: readonly WorkbenchBlock[]): EditorialD
       case 'quote': return { type: 'quote', text: block.text };
       case 'list': return {
         type: 'list',
-        items: block.text.split(/\r?\n/u).filter(line => line.trim().length > 0),
+        items: block.text.split(/\r?\n/u).filter((line: string) => line.trim().length > 0),
       };
       default: throw new Error('Unsupported workbench block');
     }
