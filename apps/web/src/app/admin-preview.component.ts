@@ -1,4 +1,7 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import type { EditorialDocumentV1 } from '../../../api/src/editorial/document';
 import {
   WORKBENCH_BLOCK_LIMIT, createWorkbenchBlock, createWorkbenchImageBlock, workbenchDocument,
 } from '../../../api/src/editorial/editor-workbench';
@@ -15,17 +18,255 @@ import {
 import type { DraftTaxonomyV1 } from '../../../api/src/editorial/publication-taxonomy';
 import type { PublicationDiagnostic } from '../../../api/src/editorial/publication-tools';
 
+interface DraftListItem {
+  readonly id: string;
+  readonly title: string;
+  readonly slug: string;
+  readonly kind: 'post' | 'page';
+  readonly revision: number;
+  readonly updatedAt: string;
+}
+interface PersistedDraft {
+  readonly id: string;
+  readonly kind: 'post' | 'page';
+  readonly title: string;
+  readonly slug: string;
+  readonly excerpt: string;
+  readonly revision: number;
+  readonly status: 'draft' | 'published';
+  readonly body: EditorialDocumentV1;
+}
+
+
 /**
- * Explicitly offline: this view is not an authenticated admin editor.
- * All values live in Angular memory only and are lost on refresh.
+ * Authenticated workbench: draft save/load/publish is explicit and revision-checked.
+ * Media catalog, taxonomy and cover remain demonstrative until persisted.
  */
 @Component({
   selector: 'blog-admin-preview',
   standalone: true,
+  imports: [RouterLink],
   templateUrl: './admin-preview.component.html',
   styleUrl: './admin-preview.component.css',
 })
+
 export class AdminPreviewComponent {
+
+  private readonly http = inject(HttpClient);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  readonly canPublish = input(false);
+  protected readonly kind = signal<'post' | 'page'>('post');
+  protected readonly draftId = signal<string | null>(null);
+  protected readonly revision = signal<number | null>(null);
+  protected readonly draftList = signal<readonly DraftListItem[]>([]);
+  protected readonly showDrafts = signal(false);
+  protected readonly busy = signal(false);
+  protected readonly published = signal(false);
+  protected readonly saveMessage = signal<string | null>(null);
+  protected readonly saveError = signal<string | null>(null);
+  private readonly savedSignature = signal<string | null>(null);
+  protected readonly unsaved = computed(() => this.savedSignature() !== this.signature());
+
+  constructor() {
+    const queryId = this.route.snapshot.queryParamMap.get('draft');
+    if (queryId && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(queryId)) {
+      this.loadDraft(queryId, true);
+    }
+  }
+
+  private signature(): string {
+    return JSON.stringify({
+      title: this.title(), slug: this.slug(), excerpt: this.excerpt(),
+      blocks: this.blocks(), kind: this.kind(),
+    });
+  }
+
+  private csrf(): string | null {
+    return document.cookie.split(';').map(entry => entry.trim())
+      .find(entry => entry.startsWith('cms_csrf='))?.slice('cms_csrf='.length) ?? null;
+  }
+
+  protected changeKind(raw: string): void {
+    if (this.draftId() !== null) return;
+    if (raw === 'post' || raw === 'page') this.kind.set(raw);
+  }
+
+  protected newDraft(): void {
+    if (this.unsaved() && !window.confirm('Descartar alterações não salvas e começar outro rascunho?')) return;
+    this.draftId.set(null);
+    this.revision.set(null);
+    this.kind.set('post');
+    this.title.set('');
+    this.slug.set('');
+    this.excerpt.set('');
+    this.blocks.set([{ ...createWorkbenchBlock(1, 'paragraph'), text: '' }]);
+    this.nextBlockId = 2;
+    this.published.set(false);
+    this.savedSignature.set(null);
+    this.saveMessage.set(null);
+    this.saveError.set(null);
+    void this.router.navigate([], {
+      relativeTo: this.route, queryParams: { draft: null },
+      queryParamsHandling: 'merge', replaceUrl: true,
+    });
+  }
+
+  protected listDrafts(): void {
+    if (this.busy()) return;
+    this.busy.set(true);
+    this.saveError.set(null);
+    this.http.get<readonly DraftListItem[]>('/api/admin/editorial/drafts').subscribe({
+      next: items => {
+        this.draftList.set(items);
+        this.showDrafts.set(true);
+        this.busy.set(false);
+      },
+      error: () => {
+        this.saveError.set('Não foi possível carregar os rascunhos. Verifique sua sessão.');
+        this.busy.set(false);
+      },
+    });
+  }
+
+  protected selectDraft(id: string): void {
+    if (!id) return;
+    this.loadDraft(id, false);
+  }
+
+  private loadDraft(id: string, fromLink: boolean): void {
+    if (this.busy()) return;
+    if (!fromLink && this.unsaved()
+      && !window.confirm('Descartar alterações não salvas e carregar outro rascunho?')) return;
+    this.busy.set(true);
+    this.saveError.set(null);
+    this.http.get<PersistedDraft>('/api/admin/editorial/drafts/' + encodeURIComponent(id)).subscribe({
+      next: post => {
+        const blocks: WorkbenchBlock[] = post.body.blocks.map((block, index): WorkbenchBlock => {
+          const base = { id: index + 1, kind: block.type, level: 2 as const };
+          if (block.type === 'list') return { ...base, text: block.items.join('\n') };
+          if (block.type === 'image') return { ...base, text: block.alt, mediaId: block.mediaId };
+          return { ...base, text: block.text, level: block.type === 'heading' ? block.level : 2 };
+        });
+        this.draftId.set(post.id);
+        this.revision.set(post.revision);
+        this.kind.set(post.kind);
+        this.title.set(post.title);
+        this.slug.set(post.slug);
+        this.excerpt.set(post.excerpt);
+        this.blocks.set(blocks);
+        this.nextBlockId = blocks.length + 1;
+        this.published.set(false);
+        this.savedSignature.set(this.signature());
+        this.saveMessage.set('Rascunho recuperado do banco.');
+        this.busy.set(false);
+        if (!fromLink) void this.router.navigate([], {
+          relativeTo: this.route, queryParams: { draft: post.id },
+          queryParamsHandling: 'merge', replaceUrl: true,
+        });
+      },
+      error: () => {
+        this.saveError.set('Rascunho indisponível ou sem permissão de acesso.');
+        this.busy.set(false);
+      },
+    });
+  }
+
+  protected saveDraft(): void {
+    if (this.busy() || this.published()) return;
+    let body: EditorialDocumentV1;
+    try {
+      body = workbenchDocument(this.blocks());
+    } catch {
+      this.saveError.set('Revise os blocos inválidos antes de salvar.');
+      return;
+    }
+    if (body.blocks.some(block => block.type === 'image')) {
+      this.saveError.set('Imagens de demonstração ainda não podem ser persistidas. Remova-as antes de salvar.');
+      return;
+    }
+    const csrf = this.csrf();
+    if (!csrf) {
+      this.saveError.set('Sessão sem token CSRF. Entre novamente para salvar.');
+      return;
+    }
+    const payload = { title: this.title(), slug: this.slug(),
+      excerpt: this.excerpt(), body };
+    const signature = this.signature();
+    const id = this.draftId();
+    const revision = this.revision();
+    if (id && revision === null) return;
+    this.saveError.set(null);
+    this.saveMessage.set(null);
+    this.busy.set(true);
+    const response = id && revision !== null
+      ? this.http.patch<PersistedDraft>('/api/admin/editorial/drafts/' + id,
+        { ...payload, expectedRevision: revision }, { headers: { 'X-CMS-CSRF': csrf } })
+      : this.http.post<PersistedDraft>('/api/admin/editorial/drafts',
+        { ...payload, kind: this.kind() }, { headers: { 'X-CMS-CSRF': csrf } });
+    response.subscribe({
+      next: post => {
+        this.draftId.set(post.id);
+        this.revision.set(post.revision);
+        this.kind.set(post.kind);
+        this.savedSignature.set(signature);
+        this.saveMessage.set('Rascunho salvo no PostgreSQL (revisão ' + post.revision + ').');
+        this.busy.set(false);
+        void this.router.navigate([], {
+          relativeTo: this.route, queryParams: { draft: post.id },
+          queryParamsHandling: 'merge', replaceUrl: true,
+        });
+      },
+      error: (error: unknown) => {
+        this.busy.set(false);
+        this.saveError.set(error instanceof HttpErrorResponse && error.status === 409
+          ? 'Conflito de revisão ou endereço repetido. Reabra o rascunho antes de salvar.'
+          : error instanceof HttpErrorResponse && error.status === 403
+            ? 'Permissão ou proteção CSRF negou o salvamento.'
+            : 'Não foi possível salvar. O conteúdo local permanece na tela.');
+      },
+    });
+  }
+
+  protected publishDraft(): void {
+    const id = this.draftId();
+    const revision = this.revision();
+    if (!this.canPublish() || !id || revision === null || this.busy() || this.published()) return;
+    if (this.unsaved()) {
+      this.saveError.set('Salve as alterações antes de publicar.');
+      return;
+    }
+    const csrf = this.csrf();
+    if (!csrf) {
+      this.saveError.set('Sessão sem token CSRF. Entre novamente para publicar.');
+      return;
+    }
+    this.busy.set(true);
+    this.saveError.set(null);
+    this.saveMessage.set(null);
+    this.http.post<PersistedDraft>('/api/admin/editorial/drafts/' + id + '/publish',
+      { expectedRevision: revision }, { headers: { 'X-CMS-CSRF': csrf } }).subscribe({
+      next: post => {
+        this.revision.set(post.revision);
+        this.published.set(true);
+        this.busy.set(false);
+        this.saveMessage.set('Publicado. O conteúdo está disponível na área pública.');
+        void this.router.navigate([], {
+          relativeTo: this.route, queryParams: { draft: null },
+          queryParamsHandling: 'merge', replaceUrl: true,
+        });
+      },
+      error: (error: unknown) => {
+        this.busy.set(false);
+        this.saveError.set(error instanceof HttpErrorResponse && error.status === 409
+          ? 'Versão desatualizada. Reabra o rascunho e tente novamente.'
+          : error instanceof HttpErrorResponse && error.status === 422
+            ? 'O conteúdo ainda não atende às regras de publicação.'
+            : 'Não foi possível publicar. O rascunho permanece salvo.');
+      },
+    });
+  }
+
   protected readonly title = signal('Meu primeiro artigo');
   protected readonly slug = signal('meu-primeiro-artigo');
   protected readonly excerpt = signal('');

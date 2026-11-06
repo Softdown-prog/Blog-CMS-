@@ -85,3 +85,17 @@ button.remove-action { background: #fff; color: #8a2630; border: 1px solid #deb6
   .media-panel { padding: .75rem; }
   .media-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Persistent editorial actions reuse this workbench instead of duplicating it. */
+.draft-persistence { margin: 1rem 0 1.5rem !important; display: grid; gap: .8rem; }
+.draft-persistence-row { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
+.draft-persistence-row label { min-width: 110px; }
+.draft-persistence-row select { flex: 1 1 210px; max-width: 280px; }
+.draft-persistence-row button { flex: 0 0 auto; }
+.draft-persistence [role=alert] { color: #982b36; font-weight: 650; }
+.draft-persistence [role=status] { color: #214e32; font-weight: 650; }
+.draft-persistence a { display: inline-flex; width: fit-content; padding: .35rem 0; font-weight: 700; }
+@media(max-width:540px) {
+ .draft-persistence-row > * { flex: 1 1 100%; }
+ .draft-persistence-row select { max-width: none; }
+}

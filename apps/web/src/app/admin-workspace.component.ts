@@ -28,7 +28,7 @@ interface SessionInfo {
       </button>
       @if (error()) { <p role="alert">{{ error() }}</p> }
     </section>
-    <blog-admin-preview />
+    <blog-admin-preview [canPublish]="role() === 'editor' || role() === 'admin'" />
   `,
 })
 export class AdminWorkspaceComponent {

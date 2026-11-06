@@ -15,18 +15,18 @@ CMS de blog próprio, hospedado exclusivamente na VPS. Repositório em implanta�
   que exibe parágrafos, títulos, citações e listas com texto escapado. Referências
   de imagem mostram apenas seu texto ALT até existir mídia pública validada.
   `/login` autentica no NestJS e a rota `/admin` exige sessão válida; a bancada
-  editorial dentro do painel continua demonstrativa, em memória e sem escrita.
+  editorial permite salvar e reabrir rascunhos no PostgreSQL e publicar com permissão, mediante ação explícita. Mídias, tags, categorias e capas de demonstração ainda não persistem.
 - `apps/api`: NestJS com leitura pública de lista e detalhe de artigos publicados
   via PostgreSQL quando configurado (`GET /api/public/posts` e
   `GET /api/public/posts/:slug`). Rascunhos, agendados e arquivados não são
   expostos; falhas do banco são 503, ausências são 404. Escrita editorial,
-  edição de artigos e uploads ainda não têm conexão HTTP de produção. O adaptador
+  uploads e vinculação real de categorias/imagens ainda não têm conexão HTTP de produção. O adaptador
   de login/sessão HTTP já usa Argon2id e PostgreSQL quando a configuração de
   autenticação está presente; sem configuração, retorna 503 sem fallback.
 - `database/migrations` e `database/proposals`: SQL versionado/proposto (incluindo
   proposta 003 para sessões e segurança),
   **não aplicado à VPS**.
-- `scripts/sac-build.mjs`: pipeline SAC; Playwright testa a bancada offline e
+- `scripts/sac-build.mjs`: pipeline SAC; Playwright testa o editor (persistência simulada no navegador) e
   a navegação pública com respostas HTTP simuladas nos testes do navegador.
 - `docs`: documentação e prioridades verificáveis.
 
@@ -36,8 +36,14 @@ administrativas em `/admin/site`. A proposta SQL 004 é somente para CI e não
 foi aplicada à VPS. Ver [páginas e widgets](docs/CONTENT_LAYOUT_PROPOSAL.md).
 A popularidade só existe com contagem real e chave de métricas configurada.
 
-**Próxima prioridade:** fechar o fluxo real escrever -> salvar -> publicar ->
-ler, antes de adicionar mais módulos periféricos. Critérios e bloqueios:
+**Fluxo editorial implementado em código:** criar e salvar rascunhos, recarregar
+por ID, revisar versão e publicar posts/páginas. O NestJS aplica sessão, CSRF,
+RBAC e revisão otimista; o Angular executa cada ação explicitamente, sem
+salvar automaticamente nem armazenar tokens no browser. Consulte
+[docs/EDITORIAL_HTTP_MVP.md](docs/EDITORIAL_HTTP_MVP.md).
+
+**Próxima prioridade:** homologar autenticação, banco, migrações e deploy em
+ambiente seguro; depois persistir mídia, taxonomia e upload. Critérios e bloqueios:
 [docs/CMS_MVP_PRIORITIES.md](docs/CMS_MVP_PRIORITIES.md).
 
 ## Desenvolvimento (Node 24.15+)
@@ -50,10 +56,11 @@ npm run start --prefix apps/web
 API: http://localhost:3000/api/health; web: http://localhost:4200.
 Leitura pública depende de PostgreSQL configurado e artigos previamente publicados.
 O login HTTP e o logout existem no código, mas dependem da proposta 003 aplicada
-em base isolada e de variáveis de ambiente; não há cadastro de contas, criação/
-publicação de artigos nem homologação de proxy/segurança para produção.
-Veja `docs/ADMIN_SESSION_ARCHITECTURE.md`.
-A bancada editorial ainda é uma demonstração.
+em base isolada e de variáveis de ambiente; não há cadastro automático de contas
+nem homologação de proxy/segurança para produção. As rotas editoriais precisam
+das propostas 002 e 004 aplicadas em banco isolado (e 003 para autenticação).
+Veja `docs/ADMIN_SESSION_ARCHITECTURE.md` e `docs/EDITORIAL_HTTP_MVP.md`.
+A bancada salva apenas texto e blocos editoriais sem imagens demonstrativas.
 **Não implantar em produção.**
 
 ## Qualidade e integração
