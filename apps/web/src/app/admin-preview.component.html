@@ -57,6 +57,63 @@
     }
   </section>
 
+
+  @if (draftId() && !published()) {
+    <section class="panel historical-panel" aria-label="Histórico de revisões" data-testid="draft-history">
+      <div class="panel-head">
+        <div>
+          <h2>Histórico de revisões</h2>
+          <p class="hint">Veja versões anteriores salvas no banco e recupere uma delas sem apagar o histórico.</p>
+        </div>
+        <button type="button" data-testid="load-history" [disabled]="busy()"
+          (click)="loadHistory()">Consultar histórico</button>
+      </div>
+      @if (historyError()) {
+        <p role="alert" data-testid="history-error">{{ historyError() }}</p>
+      }
+      @if (showHistory()) {
+        @if (historyEntries().length > 0) {
+          <label for="history-select">Versão salva</label>
+          <select id="history-select" data-testid="history-select" #historyValue
+            [disabled]="busy()" (change)="selectHistory(historyValue.value)">
+            <option value="">Selecione uma revisão para visualizar...</option>
+            @for (entry of historyEntries(); track entry.revision) {
+              <option [value]="entry.revision">
+                Revisão {{ entry.revision }} · {{ entry.recordedAt | date:'dd/MM/yyyy HH:mm' }}
+              </option>
+            }
+          </select>
+          @if (selectedHistorical(); as historical) {
+            <div class="historical-preview" data-testid="historical-preview">
+              <p><strong>Revisão {{ historical.revision }}</strong>
+                · {{ historical.recordedAt | date:'dd/MM/yyyy HH:mm' }}</p>
+              <p><strong>Título:</strong> {{ historical.snapshot.title }}</p>
+              <p><strong>Endereço:</strong> {{ historical.snapshot.slug }}</p>
+              <p><strong>Resumo:</strong> {{ historical.snapshot.excerpt || 'Sem resumo' }}</p>
+              <div class="historical-blocks" aria-label="Conteúdo da versão salva">
+                @for (block of historical.snapshot.body.blocks; track $index) {
+                  <p>{{ historicalText(block) }}</p>
+                }
+              </div>
+              <button type="button" data-testid="restore-history"
+                [disabled]="busy() || unsaved() || historical.revision >= revision()!"
+                (click)="restoreHistorical()">Recuperar esta versão</button>
+              @if (unsaved()) {
+                <p class="hint">Salve ou descarte suas mudanças locais antes de restaurar.</p>
+              }
+            </div>
+          }
+        } @else {
+          <p>Nenhuma revisão anterior disponível.</p>
+        }
+        @if (historyCursor() !== null) {
+          <button type="button" data-testid="history-more" [disabled]="busy()"
+            (click)="loadHistory(true)">Carregar mais revisões</button>
+        }
+      }
+    </section>
+  }
+
   <div class="workbench-layout">
     <section class="panel editor-panel" aria-labelledby="editor-title">
       <div class="panel-head">

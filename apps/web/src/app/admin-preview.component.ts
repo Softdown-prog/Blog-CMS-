@@ -1,4 +1,5 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import type { EditorialDocumentV1 } from '../../../api/src/editorial/document';
@@ -38,6 +39,20 @@ interface PersistedDraft {
 }
 
 
+
+interface HistoryRevision {
+  readonly postId: string;
+  readonly revision: number;
+  readonly recordedAt: string;
+  readonly origin: { readonly kind: 'user'; readonly userId: string }
+    | { readonly kind: 'system'; readonly service: string };
+  readonly snapshot: Omit<PersistedDraft, 'kind'>;
+}
+interface RevisionPage {
+  readonly items: readonly HistoryRevision[];
+  readonly nextBeforeRevision: number | null;
+}
+
 /**
  * Authenticated workbench: draft save/load/publish is explicit and revision-checked.
  * Media catalog, taxonomy and cover remain demonstrative until persisted.
@@ -45,7 +60,7 @@ interface PersistedDraft {
 @Component({
   selector: 'blog-admin-preview',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, DatePipe],
   templateUrl: './admin-preview.component.html',
   styleUrl: './admin-preview.component.css',
 })
@@ -61,6 +76,13 @@ export class AdminPreviewComponent {
   protected readonly revision = signal<number | null>(null);
   protected readonly draftList = signal<readonly DraftListItem[]>([]);
   protected readonly showDrafts = signal(false);
+  protected readonly showHistory = signal(false);
+  protected readonly historyEntries = signal<readonly HistoryRevision[]>([]);
+  protected readonly historyCursor = signal<number | null>(null);
+  protected readonly historySelection = signal<number | null>(null);
+  protected readonly historyError = signal<string | null>(null);
+  protected readonly selectedHistorical = computed(() =>
+    this.historyEntries().find(entry => entry.revision === this.historySelection()) ?? null);
   protected readonly busy = signal(false);
   protected readonly published = signal(false);
   protected readonly saveMessage = signal<string | null>(null);
@@ -106,6 +128,7 @@ export class AdminPreviewComponent {
     this.savedSignature.set(null);
     this.saveMessage.set(null);
     this.saveError.set(null);
+    this.clearHistory();
     void this.router.navigate([], {
       relativeTo: this.route, queryParams: { draft: null },
       queryParamsHandling: 'merge', replaceUrl: true,
@@ -156,6 +179,7 @@ export class AdminPreviewComponent {
         this.excerpt.set(post.excerpt);
         this.blocks.set(blocks);
         this.nextBlockId = blocks.length + 1;
+        this.clearHistory();
         this.published.set(false);
         this.savedSignature.set(this.signature());
         this.saveMessage.set('Rascunho recuperado do banco.');
@@ -168,6 +192,121 @@ export class AdminPreviewComponent {
       error: () => {
         this.saveError.set('Rascunho indisponível ou sem permissão de acesso.');
         this.busy.set(false);
+      },
+    });
+  }
+
+
+  private clearHistory(): void {
+    this.showHistory.set(false);
+    this.historyEntries.set([]);
+    this.historyCursor.set(null);
+    this.historySelection.set(null);
+    this.historyError.set(null);
+  }
+
+  protected loadHistory(loadMore = false): void {
+    const id = this.draftId();
+    if (!id || this.busy()) return;
+    const cursor = loadMore ? this.historyCursor() : null;
+    if (loadMore && cursor === null) return;
+    this.busy.set(true);
+    this.historyError.set(null);
+    const suffix = cursor === null ? '?limit=10' : '?limit=10&beforeRevision=' + cursor;
+    this.http.get<RevisionPage>('/api/admin/editorial/drafts/' + id + '/revisions' + suffix)
+      .subscribe({
+        next: page => {
+          if (loadMore) {
+            const seen = new Set(this.historyEntries().map(entry => entry.revision));
+            this.historyEntries.update(current => [
+              ...current, ...page.items.filter(entry => !seen.has(entry.revision)),
+            ]);
+          } else {
+            this.historyEntries.set(page.items);
+            this.historySelection.set(null);
+          }
+          this.historyCursor.set(page.nextBeforeRevision);
+          this.showHistory.set(true);
+          this.busy.set(false);
+        },
+        error: () => {
+          this.historyError.set('Não foi possível carregar o histórico desta postagem.');
+          this.busy.set(false);
+        },
+      });
+  }
+
+  protected selectHistory(raw: string): void {
+    if (!/^(0|[1-9]\d*)$/.test(raw)) {
+      this.historySelection.set(null);
+      return;
+    }
+    const value = Number(raw);
+    this.historySelection.set(this.historyEntries().some(entry => entry.revision === value)
+      ? value : null);
+  }
+
+  protected historicalText(block: EditorialDocumentV1['blocks'][number]): string {
+    if (block.type === 'image') return 'Imagem: ' + block.alt;
+    if (block.type === 'list') return block.items.join(' · ');
+    return block.text;
+  }
+
+  protected restoreHistorical(): void {
+    const id = this.draftId();
+    const target = this.selectedHistorical();
+    const currentRevision = this.revision();
+    if (!id || !target || currentRevision === null || this.busy() || this.published()) return;
+    if (target.revision >= currentRevision) {
+      this.historyError.set('Escolha uma revisão anterior à versão atual.');
+      return;
+    }
+    if (this.unsaved()) {
+      this.historyError.set('Salve as alterações atuais antes de recuperar uma versão antiga.');
+      return;
+    }
+    const csrf = this.csrf();
+    if (!csrf) {
+      this.historyError.set('Sessão inválida; entre novamente antes de restaurar.');
+      return;
+    }
+    if (!window.confirm('Recuperar a revisão ' + target.revision
+      + '? Será criada uma nova revisão e as anteriores serão preservadas.')) return;
+
+    this.busy.set(true);
+    this.historyError.set(null);
+    this.saveError.set(null);
+    this.saveMessage.set(null);
+    this.http.post<PersistedDraft>('/api/admin/editorial/drafts/' + id + '/restore',
+      { targetRevision: target.revision, expectedRevision: currentRevision },
+      { headers: { 'X-CMS-CSRF': csrf } }).subscribe({
+      next: post => {
+        const blocks = post.body.blocks.map((block, index): WorkbenchBlock => {
+          const base = { id: index + 1, kind: block.type, level: 2 as const };
+          if (block.type === 'list') return { ...base, text: block.items.join('\n') };
+          if (block.type === 'image') return { ...base, text: block.alt, mediaId: block.mediaId };
+          return { ...base, text: block.text, level: block.type === 'heading' ? block.level : 2 };
+        });
+        this.kind.set(post.kind);
+        this.title.set(post.title);
+        this.slug.set(post.slug);
+        this.excerpt.set(post.excerpt);
+        this.blocks.set(blocks);
+        this.nextBlockId = blocks.length + 1;
+        this.revision.set(post.revision);
+        this.savedSignature.set(this.signature());
+        this.clearHistory();
+        this.busy.set(false);
+        this.saveMessage.set('Revisão ' + target.revision + ' recuperada como nova revisão '
+          + post.revision + '. O histórico anterior foi preservado.');
+      },
+      error: (error: unknown) => {
+        this.busy.set(false);
+        this.historyError.set(error instanceof HttpErrorResponse && error.status === 409
+          ? 'O rascunho foi modificado ou o endereço está ocupado. Reabra o texto antes de restaurar.'
+          : error instanceof HttpErrorResponse && error.status === 404
+            ? 'A revisão não existe ou não está acessível.'
+            : 'Não foi possível recuperar a revisão. O texto atual continua na tela.');
       },
     });
   }

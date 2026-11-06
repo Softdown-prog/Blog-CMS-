@@ -74,3 +74,9 @@ Dependências ainda precisam de lockfiles versionados: a CI gera lockfiles tempo
 
 Nenhuma destas etapas autoriza mudanças na VPS, no banco de produção ou deploy.
 
+
+## Histórico de revisões do editor
+
+A API e o editor Angular permitem consultar versões anteriores de rascunhos e
+recuperar uma como nova revisão com CAS/CSRF, sem apagar o histórico.
+Veja [Histórico e recuperação de versões](docs/EDITORIAL_HISTORY_HTTP.md).
