@@ -257,6 +257,46 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
     assert.equal(after.status, 404);
   });
 
+
+  await t.test('fontes e estilos persistem no PostgreSQL até o artigo publicado', async () => {
+    const typography = {
+      font: 'georgia', size: 'large', align: 'center', bold: true, italic: false,
+    };
+    const body = { schemaVersion: 1, blocks: [
+      { type: 'heading', level: 2, text: 'Introdução' },
+      { type: 'paragraph', text: '<b>Texto escapado</b>', typography },
+    ] };
+    const invalid = await request(base, '/api/admin/editorial/drafts', 'POST', {
+      title: 'Fonte proibida', slug: 'fonte-invalida', excerpt: '',
+      body: { ...body, blocks: [{ type: 'paragraph', text: 'Texto',
+        typography: { ...typography, font: 'url(https://example.invalid/a.woff)' },
+      }] },
+    }, editor);
+    assert.equal(invalid.status, 400);
+
+    const creation = await request(base, '/api/admin/editorial/drafts', 'POST', {
+      title: 'Artigo com tipografia', slug: 'artigo-com-tipografia',
+      excerpt: 'Verificação da fonte', body, kind: 'post',
+    }, editor);
+    assert.equal(creation.status, 201);
+    const saved = await creation.json() as Draft;
+    assert.deepEqual(saved.body, body);
+    const fromDatabase = await pool.query<{ body: unknown }>(
+      'SELECT body FROM cms_posts WHERE id=$1::uuid', [saved.id],
+    );
+    assert.deepEqual(fromDatabase.rows[0]?.body, body);
+    const fromEditor = await fetch(base + '/api/admin/editorial/drafts/' + saved.id,
+      { headers: headers(editor, false) });
+    assert.equal(fromEditor.status, 200);
+    assert.deepEqual((await fromEditor.json() as Draft).body, body);
+    const publish = await request(base, '/api/admin/editorial/drafts/' + saved.id + '/publish',
+      'POST', { expectedRevision: saved.revision }, editor);
+    assert.equal(publish.status, 200);
+    const publicResponse = await fetch(base + '/api/public/posts/artigo-com-tipografia');
+    assert.equal(publicResponse.status, 200);
+    assert.deepEqual((await publicResponse.json() as Draft).body, body);
+  });
+
   await t.test('postagens publicadas entram no feed e possuem URL navegável', async () => {
     const creation = await request(base, '/api/admin/editorial/drafts', 'POST', {
       ...ARTICLE, title: 'Notícia principal', slug: 'noticia-principal', kind: 'post',
