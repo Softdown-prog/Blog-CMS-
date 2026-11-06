@@ -447,6 +447,10 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
       expectedRevision: 0, scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
     }, editor)).status, 200);
 
+    // Avoid a race with the periodic timer while asserting the explicit
+    // recovery pass. The registered worker remains callable after shutdown.
+    const worker = app.get(ScheduledPublisherWorker);
+    await worker.onApplicationShutdown();
     // Only a disposable CI database is mutated here. A real downtime keeps
     // the overdue timestamp in PostgreSQL until the API worker restarts.
     await pool.query(
@@ -454,7 +458,6 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
       "WHERE id=$1::uuid AND status='scheduled'",
       [draft.id],
     );
-    const worker = app.get(ScheduledPublisherWorker);
     const first = await worker.runOnce();
     assert.deepEqual(first, { ok: true, selected: 1, published: 1, skipped: 0 });
     assert.equal((await fetch(base + '/api/public/posts/' + draft.slug)).status, 200);
