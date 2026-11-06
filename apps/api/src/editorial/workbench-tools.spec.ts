@@ -58,7 +58,7 @@ test('substituição em múltiplos blocos tem contagem, não altera metadados ne
 test('busca não altera ALT de imagens e permite substituição vazia para excluir texto', () => {
   const source = [
     { ...createWorkbenchBlock(1, 'paragraph'), text: 'item item' },
-    { ...createWorkbenchBlock(2, 'image' as 'paragraph'), kind: 'image' as const,
+    { ...createWorkbenchBlock(2, 'paragraph'), kind: 'image' as const,
       mediaId: '7ecda2c8-969f-4d5c-8fbc-463dbaf3b145', text: 'item alternativo' },
   ];
   assert.equal(countWorkbenchMatches(source, 'item'), 2);
@@ -77,7 +77,7 @@ test('texto não vira HTML e substituição não viola limites canônicos', () =
   assert.throws(() => replaceWorkbenchText(source, '', 'teste'), /inválida/);
   assert.throws(() => replaceWorkbenchText(source, 'Título', 'x'.repeat(501)), /inválida/);
   assert.throws(() => replaceWorkbenchText(source, 'Título', '\u0000'), /inválida/);
-  const huge = [{ ...createWorkbenchBlock(1, 'paragraph'), text: 'a '.repeat(251) }];
+  const huge = [{ ...createWorkbenchBlock(1, 'paragraph'), text: 'a '.repeat(501) }];
   assert.throws(() => replaceWorkbenchText(huge, 'a', 'z'), /Muitas ocorrências/);
-  assert.equal(huge[0]?.text, 'a '.repeat(251));
+  assert.equal(huge[0]?.text, 'a '.repeat(501));
 });

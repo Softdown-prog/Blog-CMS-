@@ -29,8 +29,8 @@ test('mover e duplicar preserva o conteúdo; desfazer/refazer recupera a ordem',
   await expect(page.locator('.edit-block').first()).toContainText('Parágrafo');
   await page.getByTestId('redo-edit').click();
   await expect(page.locator('.edit-block')).toHaveCount(3);
-  await page.getByRole('button', { name: 'Mover bloco 1 para cima' }).isDisabled().then(value => expect(value).toBe(true));
-  await page.getByRole('button', { name: 'Mover bloco 3 para baixo' }).isDisabled().then(value => expect(value).toBe(true));
+  await expect(page.getByRole('button', { name: 'Mover bloco 1 para cima' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Mover bloco 3 para baixo' })).toBeDisabled();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });
@@ -41,7 +41,7 @@ test('localizar/substituir busca texto literal, não transforma HTML em DOM e ac
   await page.getByTestId('post-replacement').fill('<img src=x onerror="window.__postToolXss = 1">');
   await page.getByTestId('replace-post-text').click();
   await expect(page.getByTestId('post-tool-status')).toContainText('1 ocorrência');
-  await expect(page.locator('#block-text-2')).toContainText('<img src=x onerror');
+  await expect(page.locator('#block-text-2')).toHaveValue(/<img src=x onerror/);
   await expect(page.getByTestId('post-preview').locator('img')).toHaveCount(0);
   expect(await page.evaluate(() => (window as Window & { __postToolXss?: number }).__postToolXss))
     .toBeUndefined();
