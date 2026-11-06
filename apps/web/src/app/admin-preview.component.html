@@ -1,19 +1,70 @@
 <section class="container workbench">
-  <p class="eyebrow">CMS · LABORATÓRIO EDITORIAL</p>
+  <p class="eyebrow">CMS · EDITORIAL</p>
   <h1>Ferramentas de publicação</h1>
   <p class="intro">Edite os blocos, confira a prévia e receba sugestões antes de publicar.</p>
   <p class="offline-note" role="status" data-testid="workbench-offline">
-    Demonstração local: nada é salvo, enviado ao servidor ou publicado. Ao recarregar a página, o texto será perdido.
+    Os campos não são enviados automaticamente: nada é salvo sem usar "Salvar rascunho". Após salvar, é possível reabrir pela lista ou pelo endereço desta página. Categorias, tags e capas demonstrativas ainda não são persistidas.
   </p>
+
+
+  <section class="panel draft-persistence" aria-label="Salvamento e publicação" data-testid="draft-persistence">
+    <div class="draft-persistence-row">
+      <label for="editor-kind">Tipo de conteúdo</label>
+      <select id="editor-kind" data-testid="editor-kind"
+        [value]="kind()" [disabled]="draftId() !== null"
+        #kindInput (change)="changeKind(kindInput.value)">
+        <option value="post">Postagem (blog)</option>
+        <option value="page">Página fixa / tutorial</option>
+      </select>
+      <button type="button" data-testid="save-draft"
+        [disabled]="busy() || published()" (click)="saveDraft()">
+        {{ draftId() ? 'Salvar alterações' : 'Salvar rascunho' }}
+      </button>
+      @if (canPublish()) {
+        <button type="button" data-testid="publish-draft"
+          [disabled]="busy() || !draftId() || published() || unsaved()"
+          (click)="publishDraft()">Publicar</button>
+      }
+      <button type="button" data-testid="load-drafts" class="inline-action"
+        [disabled]="busy()" (click)="listDrafts()">Meus rascunhos</button>
+      <button type="button" data-testid="new-draft" class="inline-action"
+        [disabled]="busy()" (click)="newDraft()">Novo texto</button>
+    </div>
+    @if (showDrafts()) {
+      <label for="stored-draft">Rascunhos disponíveis</label>
+      <select id="stored-draft" data-testid="stored-draft" #storedDraft
+        [disabled]="busy()" (change)="selectDraft(storedDraft.value)">
+        <option value="">Selecione para reabrir...</option>
+        @for (entry of draftList(); track entry.id) {
+          <option [value]="entry.id">
+            {{ entry.kind === 'page' ? 'Página' : 'Postagem' }} · {{ entry.title }} · rev. {{ entry.revision }}
+          </option>
+        }
+      </select>
+      @if (draftList().length === 0) { <p>Nenhum rascunho disponível.</p> }
+    }
+    @if (saveError()) {
+      <p role="alert" data-testid="editor-save-error">{{ saveError() }}</p>
+    }
+    @if (saveMessage()) {
+      <p role="status" data-testid="editor-save-status">{{ saveMessage() }}</p>
+    }
+    @if (published()) {
+      <a data-testid="published-link"
+         [routerLink]="kind() === 'page' ? ['/pages', slug()] : ['/posts', slug()]">
+        Abrir {{ kind() === 'page' ? 'página' : 'postagem' }} publicada
+      </a>
+    }
+  </section>
 
   <div class="workbench-layout">
     <section class="panel editor-panel" aria-labelledby="editor-title">
       <div class="panel-head">
         <div>
-          <p class="eyebrow">RASCUNHO LOCAL</p>
+          <p class="eyebrow">EDITOR DE {{ kind() === 'page' ? 'PÁGINA' : 'POSTAGEM' }}</p>
           <h2 id="editor-title">Escrever artigo</h2>
         </div>
-        <span class="state-tag">Não salvo</span>
+        <span class="state-tag">{{ published() ? 'Publicado' : draftId() ? (unsaved() ? 'Alterações não salvas' : 'Revisão ' + revision()) : 'Não salvo' }}</span>
       </div>
 
       <div class="field">
@@ -239,7 +290,7 @@
           </div>
           <article class="post-preview" data-testid="post-preview"
             [class.preview-mobile]="previewSize() === 'mobile'">
-            <p class="preview-eyebrow">PRÉVIA NÃO PUBLICADA</p>
+            <p class="preview-eyebrow">{{ published() ? 'ARTIGO PUBLICADO' : 'PRÉVIA NÃO PUBLICADA' }}</p>
             @if (taxonomy().category) {
               <p class="preview-category" data-testid="preview-category">
                 Categoria: {{ taxonomy().category }}
@@ -298,7 +349,7 @@
           {{ showHelp() ? 'Ocultar orientações' : 'Orientações do painel' }}
         </button>
         @if (showHelp()) {
-          <p data-testid="admin-help-text">Esta tela é apenas um laboratório. Não existe login, upload ou publicação ativos aqui.</p>
+          <p data-testid="admin-help-text">O login e o salvamento usam o banco PostgreSQL. Apenas editores podem publicar; categorias, tags e imagens demonstrativas ainda não são gravadas.</p>
         }
       </section>
     </aside>

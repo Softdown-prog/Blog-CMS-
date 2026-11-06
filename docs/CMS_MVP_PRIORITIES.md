@@ -130,3 +130,24 @@ Ver [CONTENT_LAYOUT_PROPOSAL.md](CONTENT_LAYOUT_PROPOSAL.md).
 Continuam faltando salvamento/publicação real pelo Angular, retenção de
 impressões, revisão LGPD, configuração de IP confiável no Caddy, lockfiles
 estáveis e homologação de segurança.
+
+
+## Editor HTTP integrado — etapa de código, não deploy
+
+Nesta branch, o editor Angular existente faz criação, carregamento por URL,
+listagem, salvamento CAS e publicação explicitamente via NestJS. Operações
+são protegidas por sessão HttpOnly, CSRF/Origin e RBAC. Um autor só vê ou
+salva seus próprios rascunhos e não publica; editor/admin pode publicar.
+O banco PostgreSQL insere/atualiza o post e o snapshot da revisão numa
+transação. Postagens e páginas preservam content_kind.
+
+O editor não envia auto-save a cada tecla: erros 409 indicam conflito de
+revisão sem sobrescrever outra versão. A seleção do tipo ocorre ao criar;
+imagens do catálogo de demonstração não são enviadas nem persistidas.
+Taxonomia e capas seguem locais e têm aviso explícito na interface.
+Testes HTTP/PostgreSQL exercitam permissões, concorrência e publicação;
+Playwright desktop/mobile verifica o controle de salvar/reabrir.
+
+**Não é validação de produção:** faltam provisão de contas, migrações
+seguras de banco já povoado, Caddy/HTTPS real, limpeza de outbox/sessões,
+travar lockfiles e retenção LGPD. Nenhuma migration foi aplicada à VPS.
