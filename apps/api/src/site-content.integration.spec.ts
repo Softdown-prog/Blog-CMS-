@@ -3,6 +3,8 @@ import test from 'node:test';
 import { Pool } from 'pg';
 import { SiteContentService } from './site-content.service';
 import { PostsService } from './posts.service';
+import { ButtonGadgetService, readSiteButtons } from './button-gadget';
+import { BadRequestException } from '@nestjs/common';
 
 function safeUrl(): string {
   const raw = process.env['PG_INTEGRATION_URL'];
@@ -74,5 +76,44 @@ test('separação de post/page, widgets e métricas em PostgreSQL descartável',
     const switched = await site.setDraftKind(draft.rows[0].id, { kind: 'page' });
     assert.equal(switched.kind, 'page');
     await assert.rejects(site.setDraftKind(pageId, { kind: 'post' }));
+  });
+
+  await t.test('gadget de botões persiste, protege URL, limita concorrência e respeita habilitação', async () => {
+    const gadget = new ButtonGadgetService(pool);
+    await site.updateWidget('buttons', {
+      title: 'Links úteis', enabled: true, position: 3, content: '',
+    });
+    const noItems = await site.publicWidgets();
+    assert.equal(noItems.some(w => w.key === 'buttons'), false);
+    const form = (n: number) => ({
+      label: 'Tutorial ' + n, hoverText: '<b>Dica literal ' + n + '</b>',
+      href: '/pages/como-usar', position: n, enabled: n !== 2,
+    });
+    await assert.rejects(gadget.create({ ...form(0), href: 'javascript:alert(1)' }),
+      BadRequestException);
+    for (let i = 1; i <= 11; i++) await gadget.create(form(i));
+    const competing = await Promise.allSettled([gadget.create(form(12)), gadget.create(form(13))]);
+    assert.equal(competing.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(competing.filter(result => result.status === 'rejected').length, 1);
+    assert.equal((await gadget.list()).length, 12);
+    const publicButtons = await readSiteButtons(pool);
+    assert.equal(publicButtons.length, 11);
+    const display = (await site.publicWidgets()).find(widget => widget.key === 'buttons');
+    assert.equal(display?.buttons?.length, 11);
+    assert.equal(display?.buttons?.some(button => button.label === 'Tutorial 2'), false);
+    const first = (await gadget.list())[0];
+    assert.ok(first);
+    const updated = await gadget.update(first.id, {
+      label: 'Documentação', hoverText: 'Ajuda online',
+      href: 'https://docs.example.org/tutorial', position: 99, enabled: true,
+    });
+    assert.equal(updated.label, 'Documentação');
+    assert.equal(updated.hoverText, 'Ajuda online');
+    assert.equal(updated.href, 'https://docs.example.org/tutorial');
+    const old = await gadget.list();
+    assert.equal(old.at(-1)?.id, first.id);
+    await gadget.remove(first.id);
+    assert.equal((await gadget.list()).length, 11);
+    await assert.rejects(gadget.remove(first.id));
   });
 });

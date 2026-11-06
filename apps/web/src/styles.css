@@ -55,3 +55,35 @@ footer { padding: 2rem 1rem; text-align: center; color: #61728a; }
  .widget-settings .full { grid-column:auto; }
  .container { margin:1.6rem auto; }
 }
+
+/* Native button gadget: safe anchor with hover and keyboard-focus description. */
+.widget-button-list { display: grid; gap: .75rem; }
+.widget-button-entry { position: relative; min-width: 0; }
+.widget-action-button { display: block; text-align: center; padding: .8rem 1rem;
+  border-radius: .65rem; border: 1px solid #145c89; background: #0d6095; color: #fff;
+  font-weight: 700; overflow-wrap: anywhere; text-decoration: none; transition: background .15s ease; }
+.widget-action-button:hover, .widget-action-button:focus-visible { background: #08466d; color: #fff; }
+.widget-action-button:focus-visible { outline: 3px solid #f2b540; outline-offset: 3px; }
+.widget-button-tooltip { display: block; position: absolute; z-index: 3; top: calc(100% + .25rem);
+  left: 0; right: 0; padding: .5rem .65rem; background: #162c43; color: #fff;
+  font-size: .85rem; line-height: 1.5; border-radius: .5rem; overflow-wrap: anywhere;
+  opacity: 0; pointer-events: none; visibility: hidden; }
+.widget-button-entry:hover .widget-button-tooltip,
+.widget-button-entry:focus-within .widget-button-tooltip {
+  opacity: 1; visibility: visible; }
+.button-gadget-admin { display: grid; gap: 1rem; min-width: 0; margin: .8rem 0; }
+.button-gadget-admin .widget-button-editor { display: grid; gap: .6rem; border: 1px solid #d6e2ef;
+  border-radius: .6rem; padding: .8rem; }
+.button-gadget-admin label { display: grid; gap: .3rem; min-width: 0; }
+.button-gadget-admin input:not([type="checkbox"]) { width: 100%; max-width: 100%; padding: .55rem; font: inherit;
+  border: 1px solid #9eacbd; border-radius: .4rem; }
+.button-gadget-admin .button-editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.button-gadget-admin .button-editor-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.button-gadget-admin .button-editor-actions button { min-height: 40px; }
+@media (max-width: 740px) {
+ .button-gadget-admin .button-editor-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (hover: none) {
+ .widget-button-tooltip { position: static; background: transparent; color: #3d5268;
+   padding: .3rem .1rem; opacity: 1; visibility: visible; font-size: .82rem; }
+}

@@ -6,8 +6,9 @@ import {
 import { QueryResultRow } from 'pg';
 import { BLOG_DATABASE, PostsDatabase } from './database';
 import { EditorialDocumentV1, parseEditorialDocument } from './editorial/document';
+import { readSiteButtons, type SiteButton } from './button-gadget';
 
-type WidgetKey = 'latest-posts' | 'popular-posts' | 'page-links' | 'text';
+type WidgetKey = 'latest-posts' | 'popular-posts' | 'page-links' | 'text' | 'buttons';
 type ContentKind = 'post' | 'page';
 export interface PublicItem {
   readonly id: string; readonly slug: string; readonly title: string;
@@ -24,6 +25,7 @@ export interface SiteWidget {
 }
 export interface DisplayWidget extends SiteWidget {
   readonly items: readonly (PublicItem & { readonly views?: number })[];
+  readonly buttons?: readonly SiteButton[];
 }
 interface ItemRow extends QueryResultRow {
   id: string; slug: string; title: string; excerpt: string; published_at: Date;
@@ -35,7 +37,7 @@ interface WidgetRow extends QueryResultRow {
 const PUBLISHED = "status='published' AND published_at IS NOT NULL AND published_at<=NOW()";
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
-const KEYS: readonly WidgetKey[] = ['latest-posts', 'popular-posts', 'page-links', 'text'];
+const KEYS: readonly WidgetKey[] = ['latest-posts', 'popular-posts', 'page-links', 'text', 'buttons'];
 function failure(): ServiceUnavailableException {
   return new ServiceUnavailableException('Conteúdo temporariamente indisponível.');
 }
@@ -122,6 +124,13 @@ export class SiteContentService {
     const result: DisplayWidget[] = [];
     for (const current of layout) {
       let rows: (PublicItem & { readonly views?: number })[] = [];
+      if (current.key === 'buttons') {
+        let buttons: readonly SiteButton[];
+        try { buttons = await readSiteButtons(this.database()); }
+        catch { throw failure(); }
+        if (buttons.length > 0) result.push({ ...current, items: [], buttons });
+        continue;
+      }
       if (current.key === 'page-links') {
         rows = (await this.listPages()).slice(0, 8);
       } else if (current.key === 'latest-posts' || current.key === 'popular-posts') {

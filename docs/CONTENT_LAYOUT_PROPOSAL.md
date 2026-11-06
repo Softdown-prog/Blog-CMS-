@@ -29,6 +29,7 @@ fluxo autorizado de salvar/publicar. Nenhuma migração foi executada na VPS.
 | `popular-posts` | Cinco postagens com mais leituras únicas estimadas nos últimos 30 dias |
 | `page-links` | Atalhos para até oito páginas publicadas |
 | `text` | Gadget de texto puro, sem HTML/JS |
+| `buttons` | Botões com rótulo, texto de hover/foco e link, administráveis individualmente |
 
 A tabela `cms_site_widgets` persiste posição (0–100), título, visibilidade
 e texto (até 1000 caracteres). O administrador pode alterar esses campos
@@ -72,3 +73,6 @@ desktop/mobile para navegação, HTML escapado e opções administrativas.
 Conectar a criação/edição/autorização do editor ao PostgreSQL para que
 o autor possa escolher tipo de conteúdo ao salvar um rascunho e um
 editor/admin publique postagens e páginas com transação e revisão.
+
+A proposta 005 estende o cadastro de widgets para botões. Consulte
+[BUTTON_GADGET.md](BUTTON_GADGET.md) para contrato, segurança e testes.

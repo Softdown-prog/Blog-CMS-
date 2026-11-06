@@ -30,6 +30,11 @@ CMS de blog próprio, hospedado exclusivamente na VPS. Repositório em implanta�
   a navegação pública com respostas HTTP simuladas nos testes do navegador.
 - `docs`: documentação e prioridades verificáveis.
 
+**Novo gadget de botões:** o administrador pode configurar botões com rótulo,
+texto de hover, links internos/externos, ordem e ativação. O painel fica em
+`/admin/site` e o widget usa a proposta SQL 005 apenas na CI.
+Veja [Gadget de botões](docs/BUTTON_GADGET.md).
+
 **Organização pública em desenvolvimento:** feed de postagens e páginas fixas
 separados, widgets nativos (últimas, populares, atalhos, texto puro) e configurações
 administrativas em `/admin/site`. A proposta SQL 004 é somente para CI e não
