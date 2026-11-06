@@ -70,7 +70,7 @@ export class PgEditorialRepository implements EditorialRepository {
     return found.rows[0] ? mapped(found.rows[0]) : null;
   }
 
-  async createDraft(post: EditorialPost): Promise<'created' | 'duplicate-slug'> {
+  async createDraft(post: EditorialPost, kind: 'post' | 'page' = 'post'): Promise<'created' | 'duplicate-slug'> {
     if (post.status !== 'draft' || post.revision !== 0 ||
       post.scheduledAt !== null || post.publishedAt !== null) {
       throw new Error('createDraft requires an initial draft');
@@ -82,9 +82,9 @@ export class PgEditorialRepository implements EditorialRepository {
       await client.query(
         `INSERT INTO cms_posts
           (id, author_id, revision, status, title, slug, excerpt, body,
-           scheduled_at, published_at)
-         VALUES ($1::uuid, $2::uuid, 0, 'draft', $3, $4, $5, $6::jsonb, NULL, NULL)`,
-        [post.id, post.authorId, post.title, post.slug, post.excerpt, JSON.stringify(body)],
+           scheduled_at, published_at, content_kind)
+         VALUES ($1::uuid, $2::uuid, 0, 'draft', $3, $4, $5, $6::jsonb, NULL, NULL, $7)`,
+        [post.id, post.authorId, post.title, post.slug, post.excerpt, JSON.stringify(body), kind],
       );
       await this.insertRevision(client, { ...post, body }, post.authorId);
       await client.query('COMMIT');
