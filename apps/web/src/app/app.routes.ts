@@ -13,6 +13,7 @@ export const routes: Routes = [
  { path: 'pages/:slug', component: PostDetailComponent, data: { kind: 'page' } },
  { path: 'login', component: LoginComponent },
  { path: 'admin/site', component: AdminSiteComponent, canActivate: [adminGuard] },
- { path: 'admin', component: AdminWorkspaceComponent, canActivate: [adminGuard] },
+ { path: 'admin', component: AdminWorkspaceComponent, canActivate: [adminGuard],
+   canDeactivate: [(workspace: AdminWorkspaceComponent) => workspace.canLeave()] },
  { path: '**', redirectTo: '' },
 ];

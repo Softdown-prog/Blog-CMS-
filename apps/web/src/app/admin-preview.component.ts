@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, HostListener, computed, inject, input, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -88,9 +88,14 @@ export class AdminPreviewComponent {
   protected readonly saveMessage = signal<string | null>(null);
   protected readonly saveError = signal<string | null>(null);
   private readonly savedSignature = signal<string | null>(null);
+  private readonly navigationBaseline = signal<string | null>(null);
   protected readonly unsaved = computed(() => this.savedSignature() !== this.signature());
+  readonly hasPendingChanges = computed(() =>
+    this.navigationBaseline() !== null && this.signature() !== this.navigationBaseline());
 
   constructor() {
+    // A bancada abre com texto de exemplo, mas isso não conta como digitação.
+    this.navigationBaseline.set(this.signature());
     const queryId = this.route.snapshot.queryParamMap.get('draft');
     if (queryId && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(queryId)) {
       this.loadDraft(queryId, true);
@@ -104,6 +109,22 @@ export class AdminPreviewComponent {
     });
   }
 
+  /** Route navigation is cancelable; no write or silent draft discard happens here. */
+  confirmNavigation(): boolean {
+    if (this.busy()) return false;
+    return !this.hasPendingChanges()
+      || window.confirm('Existem alterações não salvas na postagem. Sair sem salvar?');
+  }
+
+  /** Browser-owned confirmation on refresh/close (not guaranteed on every mobile browser). */
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.busy() || this.hasPendingChanges()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+
   private csrf(): string | null {
     return document.cookie.split(';').map(entry => entry.trim())
       .find(entry => entry.startsWith('cms_csrf='))?.slice('cms_csrf='.length) ?? null;
@@ -115,7 +136,7 @@ export class AdminPreviewComponent {
   }
 
   protected newDraft(): void {
-    if (this.unsaved() && !window.confirm('Descartar alterações não salvas e começar outro rascunho?')) return;
+    if (!this.confirmNavigation()) return;
     this.draftId.set(null);
     this.revision.set(null);
     this.kind.set('post');
@@ -129,6 +150,7 @@ export class AdminPreviewComponent {
     this.saveMessage.set(null);
     this.saveError.set(null);
     this.clearHistory();
+    this.navigationBaseline.set(this.signature());
     void this.router.navigate([], {
       relativeTo: this.route, queryParams: { draft: null },
       queryParamsHandling: 'merge', replaceUrl: true,
@@ -159,8 +181,7 @@ export class AdminPreviewComponent {
 
   private loadDraft(id: string, fromLink: boolean): void {
     if (this.busy()) return;
-    if (!fromLink && this.unsaved()
-      && !window.confirm('Descartar alterações não salvas e carregar outro rascunho?')) return;
+    if (!fromLink && !this.confirmNavigation()) return;
     this.busy.set(true);
     this.saveError.set(null);
     this.http.get<PersistedDraft>('/api/admin/editorial/drafts/' + encodeURIComponent(id)).subscribe({
@@ -182,6 +203,7 @@ export class AdminPreviewComponent {
         this.clearHistory();
         this.published.set(false);
         this.savedSignature.set(this.signature());
+        this.navigationBaseline.set(this.signature());
         this.saveMessage.set('Rascunho recuperado do banco.');
         this.busy.set(false);
         if (!fromLink) void this.router.navigate([], {
@@ -295,6 +317,7 @@ export class AdminPreviewComponent {
         this.nextBlockId = blocks.length + 1;
         this.revision.set(post.revision);
         this.savedSignature.set(this.signature());
+        this.navigationBaseline.set(this.signature());
         this.clearHistory();
         this.busy.set(false);
         this.saveMessage.set('Revisão ' + target.revision + ' recuperada como nova revisão '
@@ -349,6 +372,8 @@ export class AdminPreviewComponent {
         this.revision.set(post.revision);
         this.kind.set(post.kind);
         this.savedSignature.set(signature);
+        // If the user kept typing during the HTTP request, those edits remain pending.
+        this.navigationBaseline.set(signature);
         this.saveMessage.set('Rascunho salvo no PostgreSQL (revisão ' + post.revision + ').');
         this.busy.set(false);
         void this.router.navigate([], {
@@ -388,6 +413,7 @@ export class AdminPreviewComponent {
       next: post => {
         this.revision.set(post.revision);
         this.published.set(true);
+        this.navigationBaseline.set(this.signature());
         this.busy.set(false);
         this.saveMessage.set('Publicado. O conteúdo está disponível na área pública.');
         void this.router.navigate([], {

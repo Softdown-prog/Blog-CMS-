@@ -99,6 +99,8 @@ test('não há transações nem chamadas API durante edição; recarregar descar
   await page.getByRole('button', { name: '+ Parágrafo' }).click();
   await expect(page.locator('#block-text-3')).toBeVisible();
   expect(unexpected).toEqual([]);
+  // Recarregar é um descarte intencional neste teste: confirmar o aviso nativo.
+  page.once('dialog', dialog => { void dialog.accept(); });
   await page.reload();
   await expect(page.getByTestId('editor-title')).toHaveValue('Meu primeiro artigo');
   await expect(page.locator('#block-text-3')).toHaveCount(0);

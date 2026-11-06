@@ -80,3 +80,9 @@ Nenhuma destas etapas autoriza mudanças na VPS, no banco de produção ou deplo
 A API e o editor Angular permitem consultar versões anteriores de rascunhos e
 recuperar uma como nova revisão com CAS/CSRF, sem apagar o histórico.
 Veja [Histórico e recuperação de versões](docs/EDITORIAL_HISTORY_HTTP.md).
+
+## Segurança de navegação editorial
+
+O painel Angular confirma saída com edições locais não salvas, inclusive ao
+encerrar a sessão. Essa proteção não é autossalvamento e não substitui o
+botão **Salvar rascunho**. Consulte [proteção de navegação](docs/EDITOR_NAVIGATION_SAFETY.md).
