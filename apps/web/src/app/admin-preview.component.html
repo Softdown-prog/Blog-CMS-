@@ -181,6 +181,8 @@
         <span class="state-tag">{{ published() ? 'Publicado' : scheduled() ? 'Agendado' : draftId() ? (unsaved() ? 'Alterações não salvas' : 'Revisão ' + revision()) : 'Não salvo' }}</span>
       </div>
 
+      <fieldset class="editor-locked" [disabled]="scheduled()">
+        <legend class="sr-only">Conteúdo editorial</legend>
       <div class="field">
         <label for="workbench-title">Título do artigo</label>
         <input id="workbench-title" data-testid="editor-title" #titleInput
@@ -350,7 +352,8 @@
         <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('list')">+ Lista</button>
         <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('quote')">+ Citação</button>
       </div>
-      <p class="hint">O envio e o salvamento serão habilitados apenas depois da autenticação e dos testes de integração.</p>
+      <p class="hint">Salve o rascunho antes de agendar ou publicar; alterações locais não são enviadas automaticamente.</p>
+      </fieldset>
     </section>
 
     <aside class="inspector" aria-label="Ferramentas e pré-visualização">

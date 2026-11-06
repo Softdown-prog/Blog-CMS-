@@ -71,6 +71,8 @@ test('agenda data/hora futura, mostra estado e recupera pela URL após reload', 
   await expect(page.getByTestId('schedule-submit')).toContainText('Salvar novo horário');
   await expect(page.getByTestId('save-draft')).toBeDisabled();
   await expect(page.getByTestId('publish-draft')).toBeDisabled();
+  await expect(page.getByTestId('editor-title')).toBeDisabled();
+  await expect(page.locator('#block-text-1')).toBeDisabled();
   expect(requests).toHaveLength(1);
   expect(requests[0]?.revision).toBe(0);
   expect(requests[0]?.scheduledAt).toBe(current().scheduledAt);
@@ -108,6 +110,7 @@ test('reagenda e cancela, protegendo a revisão e solicitando confirmação', as
   await page.getByTestId('schedule-cancel').click();
   await expect(page.getByTestId('scheduled-status')).toHaveCount(0);
   await expect(page.getByTestId('save-draft')).toBeEnabled();
+  await expect(page.getByTestId('editor-title')).toBeEnabled();
   expect(requests.map(x => x.method)).toEqual(['schedule','schedule','cancel']);
   expect(requests[2]?.revision).toBe(2);
 });
