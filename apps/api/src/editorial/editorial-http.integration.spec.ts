@@ -454,9 +454,9 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
     // Only a disposable CI database is mutated here. A real downtime keeps
     // the overdue timestamp in PostgreSQL until the API worker restarts.
     await pool.query(
-      "UPDATE cms_posts SET scheduled_at=NOW() - INTERVAL '30 seconds' " +
+      "UPDATE cms_posts SET scheduled_at=$2::timestamptz " +
       "WHERE id=$1::uuid AND status='scheduled'",
-      [draft.id],
+      [draft.id, new Date(Date.now() - 30_000).toISOString()],
     );
     const first = await worker.runOnce();
     assert.deepEqual(first, { ok: true, selected: 1, published: 1, skipped: 0 });
