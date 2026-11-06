@@ -6,6 +6,7 @@ import test from 'node:test';
 import { NestFactory } from '@nestjs/core';
 import { Pool } from 'pg';
 import { AppModule } from '../app.module';
+import { ScheduledPublisherWorker } from './application/scheduled-worker';
 import { PgScheduledPublicationStore } from './application/postgres-scheduled';
 import { ScheduledPublicationDispatcher } from './application/scheduled-dispatcher';
 
@@ -432,6 +433,34 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
     }
     const result = await dispatcher.runOnce();
     assert.deepEqual(result, { ok: true, selected: 1, published: 1, skipped: 0 });
+  });
+
+  await t.test('worker NestJS real processa item vencido após indisponibilidade', async () => {
+    const created = await request(base, '/api/admin/editorial/drafts', 'POST', {
+      ...ARTICLE, title: 'Processamento após retorno',
+      slug: 'processamento-apos-retorno', kind: 'post',
+    }, editor);
+    assert.equal(created.status, 201);
+    const draft = await created.json() as Draft;
+    const path = '/api/admin/editorial/drafts/' + draft.id;
+    assert.equal((await request(base, path + '/schedule', 'POST', {
+      expectedRevision: 0, scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
+    }, editor)).status, 200);
+
+    // Only a disposable CI database is mutated here. A real downtime keeps
+    // the overdue timestamp in PostgreSQL until the API worker restarts.
+    await pool.query(
+      "UPDATE cms_posts SET scheduled_at=NOW() - INTERVAL '30 seconds' " +
+      "WHERE id=$1::uuid AND status='scheduled'",
+      [draft.id],
+    );
+    const worker = app.get(ScheduledPublisherWorker);
+    const first = await worker.runOnce();
+    assert.deepEqual(first, { ok: true, selected: 1, published: 1, skipped: 0 });
+    assert.equal((await fetch(base + '/api/public/posts/' + draft.slug)).status, 200);
+    assert.deepEqual(await worker.runOnce(), {
+      ok: true, selected: 0, published: 0, skipped: 0,
+    });
   });
 
   await t.test('postagens publicadas entram no feed e possuem URL navegável', async () => {
