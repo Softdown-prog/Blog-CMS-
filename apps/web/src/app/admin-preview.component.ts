@@ -8,6 +8,10 @@ import {
 import type { WorkbenchBlock, WorkbenchBlockKind } from '../../../api/src/editorial/editor-workbench';
 import { reviewPublication } from '../../../api/src/editorial/publication-tools';
 import {
+  moveWorkbenchBlock, duplicateWorkbenchBlock,
+  countWorkbenchMatches, replaceWorkbenchText,
+} from '../../../api/src/editorial/workbench-tools';
+import {
   chooseFeaturedMedia, emptyFeaturedMedia, findMedia,
   sampleMediaCatalog, updateMediaAlt,
 } from '../../../api/src/editorial/publication-media';
@@ -38,6 +42,14 @@ interface PersistedDraft {
 }
 
 
+interface EditorSnapshot {
+  readonly title: string;
+  readonly slug: string;
+  readonly excerpt: string;
+  readonly kind: 'post' | 'page';
+  readonly blocks: readonly WorkbenchBlock[];
+}
+
 /**
  * Authenticated workbench: draft save/load/publish is explicit and revision-checked.
  * Media catalog, taxonomy and cover remain demonstrative until persisted.
@@ -66,6 +78,15 @@ export class AdminPreviewComponent {
   protected readonly saveMessage = signal<string | null>(null);
   protected readonly saveError = signal<string | null>(null);
   private readonly savedSignature = signal<string | null>(null);
+  protected readonly undoStack = signal<readonly EditorSnapshot[]>([]);
+  protected readonly redoStack = signal<readonly EditorSnapshot[]>([]);
+  protected readonly findTerm = signal('');
+  protected readonly replaceWith = signal('');
+  protected readonly matches = computed(() => countWorkbenchMatches(this.blocks(), this.findTerm()));
+  protected readonly toolMessage = signal<string | null>(null);
+  protected readonly toolError = signal<string | null>(null);
+  private lastEditGroup: string | null = null;
+  private lastEditTime = 0;
   protected readonly unsaved = computed(() => this.savedSignature() !== this.signature());
 
   constructor() {
@@ -82,6 +103,120 @@ export class AdminPreviewComponent {
     });
   }
 
+
+  /** Only persisted editorial fields participate in local undo/redo. */
+  private snapshot(): EditorSnapshot {
+    return {
+      title: this.title(), slug: this.slug(), excerpt: this.excerpt(),
+      kind: this.kind(), blocks: this.blocks().map(block => ({ ...block })),
+    };
+  }
+
+  private resetHistory(): void {
+    this.undoStack.set([]);
+    this.redoStack.set([]);
+    this.lastEditGroup = null;
+    this.lastEditTime = 0;
+    this.toolMessage.set(null);
+    this.toolError.set(null);
+  }
+
+  private remember(group: string | null = null): void {
+    const now = Date.now();
+    const sameTyping = group !== null && group === this.lastEditGroup
+      && now - this.lastEditTime < 850;
+    if (!sameTyping) {
+      const before = this.snapshot();
+      this.undoStack.update(previous => [...previous.slice(-49), before]);
+    }
+    this.redoStack.set([]);
+    this.lastEditGroup = group;
+    this.lastEditTime = now;
+  }
+
+  private restore(snapshot: EditorSnapshot): void {
+    this.title.set(snapshot.title);
+    this.slug.set(snapshot.slug);
+    this.excerpt.set(snapshot.excerpt);
+    this.kind.set(snapshot.kind);
+    this.blocks.set(snapshot.blocks.map(block => ({ ...block })));
+    const lastId = snapshot.blocks.reduce((last, block) => Math.max(last, block.id), 0);
+    this.nextBlockId = Math.max(this.nextBlockId, lastId + 1);
+    this.lastEditGroup = null;
+    this.lastEditTime = 0;
+    this.toolMessage.set(null);
+    this.toolError.set(null);
+  }
+
+  protected undo(): void {
+    if (this.published() || this.busy()) return;
+    const last = this.undoStack().at(-1);
+    if (!last) return;
+    const current = this.snapshot();
+    this.undoStack.update(items => items.slice(0, -1));
+    this.redoStack.update(items => [...items.slice(-49), current]);
+    this.restore(last);
+  }
+
+  protected redo(): void {
+    if (this.published() || this.busy()) return;
+    const next = this.redoStack().at(-1);
+    if (!next) return;
+    const current = this.snapshot();
+    this.redoStack.update(items => items.slice(0, -1));
+    this.undoStack.update(items => [...items.slice(-49), current]);
+    this.restore(next);
+  }
+
+  protected changeField(field: 'title' | 'slug' | 'excerpt', value: string): void {
+    if (this.published()) return;
+    const target = field === 'title' ? this.title : field === 'slug' ? this.slug : this.excerpt;
+    if (target() === value) return;
+    this.remember('field:' + field);
+    target.set(value);
+  }
+
+  private commitBlocks(next: readonly WorkbenchBlock[], group: string | null = null): void {
+    if (next === this.blocks() || this.published()) return;
+    this.remember(group);
+    this.blocks.set(next);
+    this.toolMessage.set(null);
+    this.toolError.set(null);
+  }
+
+  protected moveBlock(id: number, direction: 'up' | 'down'): void {
+    this.commitBlocks(moveWorkbenchBlock(this.blocks(), id, direction));
+  }
+
+  protected duplicateBlock(id: number): void {
+    if (!this.canAddBlock() || this.published()) return;
+    try {
+      const updated = duplicateWorkbenchBlock(this.blocks(), id, this.nextBlockId);
+      this.commitBlocks(updated);
+      this.nextBlockId++;
+    } catch {
+      this.toolError.set('Não foi possível duplicar o bloco.');
+    }
+  }
+
+  protected replaceAllInBody(): void {
+    if (this.published() || this.busy()) return;
+    this.toolMessage.set(null);
+    this.toolError.set(null);
+    try {
+      const result = replaceWorkbenchText(this.blocks(), this.findTerm(), this.replaceWith());
+      if (result.replacements === 0) {
+        this.toolMessage.set('Nenhuma ocorrência encontrada.');
+        return;
+      }
+      this.commitBlocks(result.blocks);
+      this.toolMessage.set(result.replacements + ' ocorrência(s) substituída(s). Salve o rascunho para persistir.');
+    } catch (error: unknown) {
+      this.toolError.set(error instanceof Error
+        ? error.message : 'Não foi possível substituir o texto.');
+    }
+  }
+
   private csrf(): string | null {
     return document.cookie.split(';').map(entry => entry.trim())
       .find(entry => entry.startsWith('cms_csrf='))?.slice('cms_csrf='.length) ?? null;
@@ -89,7 +224,10 @@ export class AdminPreviewComponent {
 
   protected changeKind(raw: string): void {
     if (this.draftId() !== null) return;
-    if (raw === 'post' || raw === 'page') this.kind.set(raw);
+    if ((raw === 'post' || raw === 'page') && raw !== this.kind()) {
+      this.remember();
+      this.kind.set(raw);
+    }
   }
 
   protected newDraft(): void {
@@ -106,6 +244,7 @@ export class AdminPreviewComponent {
     this.savedSignature.set(null);
     this.saveMessage.set(null);
     this.saveError.set(null);
+    this.resetHistory();
     void this.router.navigate([], {
       relativeTo: this.route, queryParams: { draft: null },
       queryParamsHandling: 'merge', replaceUrl: true,
@@ -157,6 +296,7 @@ export class AdminPreviewComponent {
         this.blocks.set(blocks);
         this.nextBlockId = blocks.length + 1;
         this.published.set(false);
+        this.resetHistory();
         this.savedSignature.set(this.signature());
         this.saveMessage.set('Rascunho recuperado do banco.');
         this.busy.set(false);
@@ -308,21 +448,24 @@ export class AdminPreviewComponent {
 
   protected addBlock(kind: Exclude<WorkbenchBlockKind, 'image'>): void {
     if (!this.canAddBlock()) return;
+    if (this.published()) return;
     const block = createWorkbenchBlock(this.nextBlockId++, kind);
-    this.blocks.update(current => [...current, block]);
+    this.commitBlocks([...this.blocks(), block]);
   }
 
   protected removeBlock(id: number): void {
-    this.blocks.update(current => current.filter(block => block.id !== id));
+    this.commitBlocks(this.blocks().filter(block => block.id !== id));
   }
 
   protected changeBlock(id: number, value: string): void {
-    this.blocks.update(current => current.map(block => block.id === id
-      ? { ...block, text: value } : block));
+    if (this.published() || this.blocks().find(block => block.id === id)?.text === value) return;
+    this.commitBlocks(this.blocks().map(block => block.id === id
+      ? { ...block, text: value } : block), 'block:' + id);
   }
 
   protected changeHeadingLevel(id: number, value: string): void {
-    this.blocks.update(current => current.map(block =>
+    if (this.published()) return;
+    this.commitBlocks(this.blocks().map(block =>
       block.id === id && block.kind === 'heading'
         ? { ...block, level: value === '3' ? 3 : 2 } : block));
   }
@@ -389,7 +532,7 @@ export class AdminPreviewComponent {
     if (!this.canAddBlock()) return;
     try {
       const block = createWorkbenchImageBlock(this.nextBlockId++, asset);
-      this.blocks.update(current => [...current, block]);
+      this.commitBlocks([...this.blocks(), block]);
       this.mediaFeedback.set(null);
     } catch {
       this.mediaFeedback.set('Antes de inserir a imagem, informe sua descrição.');
@@ -402,12 +545,12 @@ export class AdminPreviewComponent {
 
   protected applySuggestedSlug(): void {
     const suggestion = this.review().suggestedSlug;
-    if (suggestion) this.slug.set(suggestion);
+    if (suggestion) this.changeField('slug', suggestion);
   }
 
   protected applySuggestedExcerpt(): void {
     const suggestion = this.review().suggestedExcerpt;
-    if (suggestion) this.excerpt.set(suggestion);
+    if (suggestion) this.changeField('excerpt', suggestion);
   }
 
   protected blockName(kind: WorkbenchBlockKind): string {

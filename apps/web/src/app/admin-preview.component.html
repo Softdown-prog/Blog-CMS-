@@ -70,7 +70,7 @@
       <div class="field">
         <label for="workbench-title">Título do artigo</label>
         <input id="workbench-title" data-testid="editor-title" #titleInput
-          [value]="title()" maxlength="240" (input)="title.set(titleInput.value)"
+          [value]="title()" maxlength="240" (input)="changeField('title', titleInput.value)"
           autocomplete="off" />
       </div>
 
@@ -83,7 +83,7 @@
           }
         </div>
         <input id="workbench-slug" data-testid="editor-slug" #slugInput
-          [value]="slug()" maxlength="100" (input)="slug.set(slugInput.value)"
+          [value]="slug()" maxlength="100" (input)="changeField('slug', slugInput.value)"
           autocomplete="off" spellcheck="false"/>
         @if (review().suggestedSlug && review().suggestedSlug !== slug()) {
           <small class="hint">Sugestão: {{ review().suggestedSlug }}</small>
@@ -100,7 +100,7 @@
         </div>
         <textarea id="workbench-excerpt" data-testid="editor-excerpt"
           #excerptInput [value]="excerpt()" maxlength="500" rows="3"
-          (input)="excerpt.set(excerptInput.value)"></textarea>
+          (input)="changeField('excerpt', excerptInput.value)"></textarea>
       </div>
 
       <section class="taxonomy-panel" aria-labelledby="taxonomy-heading">
@@ -197,6 +197,42 @@
         }
       </section>
 
+
+      <section class="panel post-writing-tools" aria-labelledby="post-writing-tools-heading"
+        data-testid="post-writing-tools">
+        <h3 id="post-writing-tools-heading">Ferramentas de escrita</h3>
+        <p class="hint">Desfaça ou refaça alterações locais, reorganize blocos e substitua texto sem publicar automaticamente.</p>
+        <div class="post-tool-actions" role="group" aria-label="Histórico local do editor">
+          <button type="button" data-testid="undo-edit" [disabled]="undoStack().length === 0 || busy() || published()"
+            (click)="undo()">Desfazer</button>
+          <button type="button" data-testid="redo-edit" [disabled]="redoStack().length === 0 || busy() || published()"
+            (click)="redo()">Refazer</button>
+        </div>
+        <div class="post-search-fields">
+          <label for="post-find">
+            Buscar no corpo do artigo
+            <input id="post-find" data-testid="post-find" maxlength="80" #findInput
+              [value]="findTerm()" (input)="findTerm.set(findInput.value)"
+              placeholder="Palavra ou frase" />
+          </label>
+          <label for="post-replacement">
+            Substituir por
+            <input id="post-replacement" data-testid="post-replacement" maxlength="500" #replaceInput
+              [value]="replaceWith()" (input)="replaceWith.set(replaceInput.value)"
+              placeholder="Novo texto (pode ficar vazio)" />
+          </label>
+        </div>
+        <p class="hint" data-testid="post-match-count" aria-live="polite">
+          {{ matches() }} ocorrência(s) no corpo. A busca não altera título, resumo ou descrição das imagens.
+        </p>
+        <button type="button" data-testid="replace-post-text"
+          [disabled]="matches() === 0 || busy() || published()" (click)="replaceAllInBody()">
+          Substituir todas no artigo
+        </button>
+        @if (toolMessage()) { <p role="status" data-testid="post-tool-status">{{ toolMessage() }}</p> }
+        @if (toolError()) { <p role="alert" data-testid="post-tool-error">{{ toolError() }}</p> }
+      </section>
+
       <h3 class="block-heading">Blocos do artigo</h3>
       <div class="editor-blocks">
         @for (block of blocks(); track block.id) {
@@ -224,9 +260,20 @@
             @if (block.kind === 'list') {
               <small class="hint">Uma linha por item. Máximo de 40 itens.</small>
             }
-            <button type="button" class="remove-action"
-              (click)="removeBlock(block.id)"
-              [attr.aria-label]="'Remover bloco ' + ($index + 1)">Remover bloco</button>
+            <div class="block-management" role="group" [attr.aria-label]="'Ações do bloco ' + ($index + 1)">
+              <button type="button" [disabled]="$index === 0 || busy() || published()"
+                [attr.aria-label]="'Mover bloco ' + ($index + 1) + ' para cima'"
+                (click)="moveBlock(block.id, 'up')">Subir</button>
+              <button type="button" [disabled]="$index === blocks().length - 1 || busy() || published()"
+                [attr.aria-label]="'Mover bloco ' + ($index + 1) + ' para baixo'"
+                (click)="moveBlock(block.id, 'down')">Descer</button>
+              <button type="button" [disabled]="!canAddBlock() || busy() || published()"
+                [attr.aria-label]="'Duplicar bloco ' + ($index + 1)"
+                (click)="duplicateBlock(block.id)">Duplicar</button>
+              <button type="button" class="remove-action" [disabled]="busy() || published()"
+                (click)="removeBlock(block.id)"
+                [attr.aria-label]="'Remover bloco ' + ($index + 1)">Remover bloco</button>
+            </div>
           </fieldset>
         }
       </div>
@@ -236,7 +283,7 @@
         <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('list')">+ Lista</button>
         <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('quote')">+ Citação</button>
       </div>
-      <p class="hint">O envio e o salvamento serão habilitados apenas depois da autenticação e dos testes de integração.</p>
+      <p class="hint">As alterações no corpo só chegam ao PostgreSQL após clicar em Salvar rascunho ou Salvar alterações. O histórico de desfazer é local e não persiste ao recarregar.</p>
     </section>
 
     <aside class="inspector" aria-label="Ferramentas e pré-visualização">

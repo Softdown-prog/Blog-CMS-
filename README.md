@@ -36,6 +36,11 @@ administrativas em `/admin/site`. A proposta SQL 004 é somente para CI e não
 foi aplicada à VPS. Ver [páginas e widgets](docs/CONTENT_LAYOUT_PROPOSAL.md).
 A popularidade só existe com contagem real e chave de métricas configurada.
 
+**Ferramentas de postagens:** mover/duplicar blocos, localizar/substituir texto
+com validação canônica e desfazer/refazer até 50 etapas no editor Angular.
+A gravação continua explícita e protegida por revisão.
+Veja [Ferramentas de escrita](docs/POST_WRITING_TOOLS.md).
+
 **Fluxo editorial implementado em código:** criar e salvar rascunhos, recarregar
 por ID, revisar versão e publicar posts/páginas. O NestJS aplica sessão, CSRF,
 RBAC e revisão otimista; o Angular executa cada ação explicitamente, sem

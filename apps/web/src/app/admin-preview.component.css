@@ -99,3 +99,20 @@ button.remove-action { background: #fff; color: #8a2630; border: 1px solid #deb6
  .draft-persistence-row > * { flex: 1 1 100%; }
  .draft-persistence-row select { max-width: none; }
 }
+
+/* Editor productivity tools; touch targets remain usable on narrow screens. */
+.post-writing-tools { margin-top: 1.4rem !important; }
+.post-writing-tools h3 { margin: 0 0 .5rem; }
+.post-tool-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin: .8rem 0; }
+.post-search-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.post-search-fields label { min-width: 0; display: flex; flex-direction: column; gap: .45rem; }
+.post-search-fields input { width: 100%; min-width: 0; }
+.post-writing-tools > button { margin-top: .65rem; }
+.post-writing-tools [role=alert] { color: #992431; font-weight: 600; overflow-wrap: anywhere; }
+.post-writing-tools [role=status] { color: #185a32; font-weight: 600; overflow-wrap: anywhere; }
+.block-management { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .35rem; }
+.block-management button { min-height: 44px; padding: .45rem .7rem; }
+@media(max-width: 660px) {
+  .post-search-fields { grid-template-columns: minmax(0, 1fr); }
+  .block-management button { flex: 1 1 auto; }
+}
