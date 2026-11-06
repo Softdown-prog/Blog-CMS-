@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AdminPreviewComponent } from './admin-preview.component';
 
@@ -7,7 +7,7 @@ interface SessionInfo {
   readonly user: Readonly<{ id: string; role: 'admin' | 'editor' | 'author' }>;
 }
 
-/** Sessão real; a bancada editorial abaixo continua offline e sem escrita. */
+/** Sessão real; a bancada usa persistência editorial explícita com revisão. */
 @Component({
   selector: 'blog-admin-workspace',
   standalone: true,
@@ -34,6 +34,8 @@ interface SessionInfo {
 export class AdminWorkspaceComponent {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly editor = viewChild(AdminPreviewComponent);
+  private logoutNavigationAllowed = false;
   protected readonly role = signal<string | null>(null);
   protected readonly ending = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -45,6 +47,11 @@ export class AdminWorkspaceComponent {
     });
   }
 
+  /** CanDeactivate checks the real child editor, not a second or cached model. */
+  canLeave(): boolean {
+    return this.logoutNavigationAllowed || (this.editor()?.confirmNavigation() ?? true);
+  }
+
   protected logout(): void {
     if (this.ending()) return;
     // Cookie CSRF é legível; cookie de sessão é HttpOnly e jamais lido pelo JS.
@@ -54,6 +61,8 @@ export class AdminWorkspaceComponent {
       this.error.set('Não foi possível confirmar a sessão. Entre novamente.');
       return;
     }
+    // Never revoke a session before asking whether to discard unsaved work.
+    if (!(this.editor()?.confirmNavigation() ?? true)) return;
     this.ending.set(true);
     this.error.set(null);
     this.http.post('/api/admin/logout', {}, {
@@ -61,6 +70,8 @@ export class AdminWorkspaceComponent {
     }).subscribe({
       next: () => {
         this.ending.set(false);
+        // The user already confirmed before the POST; do not ask twice.
+        this.logoutNavigationAllowed = true;
         void this.router.navigateByUrl('/login');
       },
       error: () => {
