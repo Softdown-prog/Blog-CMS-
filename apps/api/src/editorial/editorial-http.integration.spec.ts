@@ -261,6 +261,10 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
   });
 
 
+  // Time is manipulated only in this disposable database. Stop periodic
+  // polling to keep these assertions deterministic; runOnce remains enabled.
+  await app.get(ScheduledPublisherWorker).onApplicationShutdown();
+
   await t.test('publica agora e agenda duas outras datas, sem duplicar nem antecipar', async () => {
     const created: Draft[] = [];
     for (let n = 1; n <= 3; n++) {
