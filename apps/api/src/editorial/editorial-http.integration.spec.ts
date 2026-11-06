@@ -320,25 +320,35 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
     assert.ok(scheduled.some(x => x.id === tomorrow.id && x.scheduledAt === firstDue));
     assert.ok(scheduled.some(x => x.id === afterTomorrow.id && x.scheduledAt === secondDue));
 
-    // The publisher uses a fake clock in this test; actual production uses Date().
+    // Check that neither future date is published prematurely. Test only:
+    // move one date at a time into the past to simulate the passage of days
+    // while keeping published_at real, so the public endpoint's NOW() gate works.
     const store = new PgScheduledPublicationStore(pool);
     const clock = (at: string) => new ScheduledPublicationDispatcher(store, { nowIso: () => at });
+    const dueNow = (): string => new Date().toISOString();
+    const expireInDisposableDb = async (id: string): Promise<void> => {
+      await pool.query(
+        "UPDATE cms_posts SET scheduled_at=$2::timestamptz " +
+        "WHERE id=$1::uuid AND status='scheduled'",
+        [id, new Date(Date.now() - 30_000).toISOString()],
+      );
+    };
     assert.deepEqual(await clock(new Date(now + dayMs / 2).toISOString()).runOnce(),
       { ok: true, selected: 0, published: 0, skipped: 0 });
+    await expireInDisposableDb(tomorrow.id);
     const [a, b] = await Promise.all([
-      clock(new Date(now + dayMs + 1000).toISOString()).runOnce(),
-      clock(new Date(now + dayMs + 1000).toISOString()).runOnce(),
+      clock(dueNow()).runOnce(),
+      clock(dueNow()).runOnce(),
     ]);
     assert.equal(a.ok && b.ok, true);
-    if (a.ok && b.ok) {
-      assert.equal(a.published + b.published, 1);
-    }
+    if (a.ok && b.ok) assert.equal(a.published + b.published, 1);
     assert.equal((await fetch(base + '/api/public/posts/' + tomorrow.slug)).status, 200);
     assert.equal((await fetch(base + '/api/public/posts/' + afterTomorrow.slug)).status, 404);
-    const future = await clock(new Date(now + 3 * dayMs).toISOString()).runOnce();
+    await expireInDisposableDb(afterTomorrow.id);
+    const future = await clock(dueNow()).runOnce();
     assert.equal(future.ok, true);
     if (future.ok) assert.equal(future.published, 1);
-    const duplicate = await clock(new Date(now + 3 * dayMs).toISOString()).runOnce();
+    const duplicate = await clock(dueNow()).runOnce();
     assert.deepEqual(duplicate, { ok: true, selected: 0, published: 0, skipped: 0 });
     assert.equal((await fetch(base + '/api/public/posts/' + afterTomorrow.slug)).status, 200);
 
@@ -414,8 +424,12 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
     const due = new Date(Date.now() + 86_400_000).toISOString();
     assert.equal((await request(base, path + '/schedule', 'POST',
       { expectedRevision: 0, scheduledAt: due }, editor)).status, 200);
+    await pool.query(
+      "UPDATE cms_posts SET scheduled_at=$2::timestamptz WHERE id=$1::uuid",
+      [draft.id, new Date(Date.now() - 30_000).toISOString()],
+    );
     const dispatcher = new ScheduledPublicationDispatcher(new PgScheduledPublicationStore(pool), {
-      nowIso: () => new Date(Date.now() + 2 * 86_400_000).toISOString(),
+      nowIso: () => new Date().toISOString(),
     });
     await pool.query(
       "ALTER TABLE cms_post_revisions ADD CONSTRAINT ci_scheduled_history_fail " +
