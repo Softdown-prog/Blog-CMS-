@@ -80,3 +80,10 @@ Nenhuma destas etapas autoriza mudanças na VPS, no banco de produção ou deplo
 A API e o editor Angular permitem consultar versões anteriores de rascunhos e
 recuperar uma como nova revisão com CAS/CSRF, sem apagar o histórico.
 Veja [Histórico e recuperação de versões](docs/EDITORIAL_HISTORY_HTTP.md).
+
+## Busca e navegação de rascunhos
+
+Em **Meus rascunhos**, é possível pesquisar títulos e endereços, filtrar por
+postagem/página e carregar resultados anteriores aos primeiros 50. O filtro
+usa [catálogo paginado de rascunhos](docs/EDITORIAL_DRAFT_CATALOG.md) no NestJS,
+sem modificar o contrato legado nem a segurança por autor.

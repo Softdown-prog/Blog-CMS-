@@ -51,6 +51,14 @@ test('autor salva página no banco, recarrega por endereço, edita e recupera re
       excerpt: body['excerpt'] as string };
     await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(latest) });
   });
+  await page.route('**/api/admin/editorial/drafts/catalog?*', async route => {
+    const requestUrl = new URL(route.request().url());
+    expect(requestUrl.searchParams.get('page')).toBe('1');
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ items: [{ id: POST_ID, title: latest.title,
+        slug: latest.slug, kind: latest.kind, revision: latest.revision,
+        updatedAt: '2026-11-05T12:00:00.000Z' }], nextPage: null }) });
+  });
   await page.route('**/api/admin/editorial/drafts/' + POST_ID, async route => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(latest) });

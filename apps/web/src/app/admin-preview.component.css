@@ -110,3 +110,15 @@ button.remove-action { background: #fff; color: #8a2630; border: 1px solid #deb6
 .historical-blocks p { white-space: pre-wrap; overflow-wrap: anywhere; margin: .6rem 0; }
 .historical-panel button { min-height: 44px; }
 .historical-panel [role=alert] { color: #a32935; font-weight: 600; }
+
+/* Search stays compact on Android and handles long titles without overflow. */
+.draft-catalog { display: grid; gap: .7rem; min-width: 0; }
+.draft-catalog-filters { display: flex; flex-wrap: wrap; gap: .65rem; align-items: end; }
+.draft-catalog-filters label { flex: 1 1 190px; min-width: 0; }
+.draft-catalog-filters input, .draft-catalog-filters select { margin-top: .35rem; }
+.draft-catalog-filters button { flex: 0 0 auto; }
+.draft-catalog select { max-width: 100%; min-width: 0; }
+.draft-catalog [role=alert] { color: #982b36; font-weight: 650; }
+@media(max-width:540px) {
+  .draft-catalog-filters > * { flex: 1 1 100%; }
+}

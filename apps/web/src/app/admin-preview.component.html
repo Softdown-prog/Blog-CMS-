@@ -31,17 +31,55 @@
         [disabled]="busy()" (click)="newDraft()">Novo texto</button>
     </div>
     @if (showDrafts()) {
-      <label for="stored-draft">Rascunhos disponíveis</label>
-      <select id="stored-draft" data-testid="stored-draft" #storedDraft
-        [disabled]="busy()" (change)="selectDraft(storedDraft.value)">
-        <option value="">Selecione para reabrir...</option>
-        @for (entry of draftList(); track entry.id) {
-          <option [value]="entry.id">
-            {{ entry.kind === 'page' ? 'Página' : 'Postagem' }} · {{ entry.title }} · rev. {{ entry.revision }}
-          </option>
+      <div class="draft-catalog" data-testid="draft-catalog">
+        <div class="draft-catalog-filters">
+          <label for="draft-search-input">
+            Buscar por título ou endereço
+            <input id="draft-search-input" data-testid="draft-search-input"
+              #draftSearch maxlength="80" [value]="draftQuery()"
+              [disabled]="busy()" (input)="draftQuery.set(draftSearch.value)"
+              placeholder="Ex.: tutorial Angular" />
+          </label>
+          <label for="draft-filter-kind">
+            Tipo de conteúdo
+            <select id="draft-filter-kind" data-testid="draft-filter-kind"
+              #draftKind [value]="draftKindFilter()" [disabled]="busy()"
+              (change)="changeDraftKind(draftKind.value)">
+              <option value="all">Todos</option>
+              <option value="post">Postagens</option>
+              <option value="page">Páginas</option>
+            </select>
+          </label>
+          <button type="button" data-testid="search-drafts" [disabled]="busy()"
+            (click)="listDrafts()">Buscar</button>
+        </div>
+        @if (draftSearchError()) {
+          <p role="alert" data-testid="draft-search-error">{{ draftSearchError() }}</p>
         }
-      </select>
-      @if (draftList().length === 0) { <p>Nenhum rascunho disponível.</p> }
+        <p class="hint" data-testid="draft-result-count">
+          {{ draftList().length }} rascunho(s) carregado(s) ·
+          {{ draftAppliedKind() === 'page' ? 'Páginas' : draftAppliedKind() === 'post' ? 'Postagens' : 'Todos os tipos' }}
+          @if (draftAppliedQuery()) { · pesquisa: "{{ draftAppliedQuery() }}" }
+        </p>
+        <label for="stored-draft">Rascunhos disponíveis</label>
+        <select id="stored-draft" data-testid="stored-draft" #storedDraft
+          [disabled]="busy() || draftList().length === 0"
+          (change)="selectDraft(storedDraft.value); storedDraft.value = ''">
+          <option value="">Selecione para reabrir...</option>
+          @for (entry of draftList(); track entry.id) {
+            <option [value]="entry.id">
+              {{ entry.kind === 'page' ? 'Página' : 'Postagem' }} · {{ entry.title }} · rev. {{ entry.revision }}
+            </option>
+          }
+        </select>
+        @if (draftList().length === 0 && !busy()) {
+          <p>Nenhum rascunho encontrado para os filtros escolhidos.</p>
+        }
+        @if (draftNextPage() !== null) {
+          <button type="button" class="inline-action" data-testid="more-drafts"
+            [disabled]="busy()" (click)="listDrafts(true)">Carregar mais rascunhos</button>
+        }
+      </div>
     }
     @if (saveError()) {
       <p role="alert" data-testid="editor-save-error">{{ saveError() }}</p>

@@ -32,6 +32,10 @@ export interface DraftSummary {
   readonly updatedAt: string;
 }
 export interface SavedDraft extends EditorialPost { readonly kind: ContentKind }
+export interface DraftCatalogPage {
+  readonly items: readonly DraftSummary[];
+  readonly nextPage: number | null;
+}
 interface DraftRow extends QueryResultRow {
   readonly id: string;
   readonly title: string;
@@ -85,6 +89,36 @@ function safeRevision(raw: string): number {
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < 0) throw new Error('Invalid stored revision');
   return value;
+}
+function mapDraft(row: DraftRow): DraftSummary {
+  return {
+    id: row.id, title: row.title, slug: row.slug,
+    kind: row.content_kind, revision: safeRevision(row.revision),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+interface CatalogQuery {
+  readonly q: string;
+  readonly kind: ContentKind | 'all';
+  readonly page: number;
+}
+function catalogQuery(raw: unknown): CatalogQuery {
+  const obj = validationObject(raw, [], ['q', 'kind', 'page']);
+  const rawQ = obj['q'];
+  const rawKind = obj['kind'];
+  const rawPage = obj['page'];
+  if ((rawQ !== undefined && (typeof rawQ !== 'string' || rawQ.length > 80))
+    || (rawKind !== undefined && rawKind !== 'all' && rawKind !== 'post' && rawKind !== 'page')
+    || (rawPage !== undefined && (typeof rawPage !== 'string'
+      || !/^[1-9][0-9]{0,4}$/.test(rawPage)
+      || Number(rawPage) > 10000))) {
+    throw new BadRequestException('Parâmetros de busca de rascunhos inválidos.');
+  }
+  return {
+    q: typeof rawQ === 'string' ? rawQ.trim() : '',
+    kind: rawKind === 'page' || rawKind === 'post' ? rawKind : 'all',
+    page: typeof rawPage === 'string' ? Number(rawPage) : 1,
+  };
 }
 
 
@@ -160,11 +194,47 @@ export class EditorialHttpService {
          FROM cms_posts WHERE status='draft'
          ORDER BY updated_at DESC,id DESC LIMIT 50`,
       );
-    return result.rows.map(row => ({
-      id: row.id, title: row.title, slug: row.slug,
-      kind: row.content_kind, revision: safeRevision(row.revision),
-      updatedAt: row.updated_at.toISOString(),
-    }));
+    return result.rows.map(mapDraft);
+  }
+
+  /**
+   * Server-side search, with actor-scoped SQL and bounded pages.
+   * The legacy GET /drafts response remains unchanged for existing consumers.
+   */
+  async catalogDrafts(actor: EditorialActor, raw: unknown): Promise<DraftCatalogPage> {
+    const { q, kind, page } = catalogQuery(raw);
+    const predicates = ["status='draft'"];
+    const params: Array<string | number> = [];
+    if (actor.role === 'author') {
+      params.push(actor.id);
+      predicates.push(`author_id=${params.length}::uuid`);
+    }
+    if (q !== '') {
+      params.push(q);
+      const position = params.length;
+      // strpos treats %, _ and backslashes as literal characters, never LIKE wildcards.
+      predicates.push(`(strpos(lower(title), lower(${position}::text)) > 0
+        OR strpos(lower(slug), lower(${position}::text)) > 0)`);
+    }
+    if (kind !== 'all') {
+      params.push(kind);
+      predicates.push(`content_kind=${params.length}::text`);
+    }
+    // One extra row determines whether there is another page. No full-table transfer.
+    params.push(21, (page - 1) * 20);
+    const limitParam = params.length - 1;
+    const offsetParam = params.length;
+    const result = await this.db().query<DraftRow>(
+      `SELECT id::text,title,slug,content_kind,revision::text,updated_at
+       FROM cms_posts WHERE ${predicates.join(' AND ')}
+       ORDER BY updated_at DESC,id DESC
+       LIMIT ${limitParam}::integer OFFSET ${offsetParam}::integer`,
+      params,
+    );
+    return {
+      items: result.rows.slice(0, 20).map(mapDraft),
+      nextPage: result.rows.length > 20 ? page + 1 : null,
+    };
   }
 
   async getDraft(actor: EditorialActor, id: string): Promise<SavedDraft> {
@@ -274,6 +344,16 @@ export class EditorialHttpController {
     this.cache(res);
     const actor = await this.actor('list-posts', req);
     return this.execute(() => this.editorial.listDrafts(actor));
+  }
+
+  @Get('drafts/catalog')
+  async catalog(
+    @Req() req: RequestMeta, @Query() query: unknown,
+    @Res({ passthrough: true }) res: HeaderResponse,
+  ): Promise<DraftCatalogPage> {
+    this.cache(res);
+    const actor = await this.actor('list-posts', req);
+    return this.execute(() => this.editorial.catalogDrafts(actor, query));
   }
 
   @Get('drafts/:id')

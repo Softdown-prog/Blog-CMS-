@@ -257,6 +257,78 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
     assert.equal(after.status, 404);
   });
 
+  await t.test('catálogo de rascunhos: busca literal, paginação e isolamento por autor', async () => {
+    const endpoint = '/api/admin/editorial/drafts/catalog';
+    const ids: string[] = [];
+    const read = (path: string, cookie = author): Promise<Response> =>
+      fetch(base + endpoint + path, { headers: headers(cookie, false) });
+    const seed = async (owner: string, title: string, slug: string, kind: 'post' | 'page'):
+      Promise<void> => {
+      const row = await pool.query<{ id: string }>(
+        'INSERT INTO cms_posts ' +
+        '(id, author_id, title, slug, excerpt, body, status, content_kind, revision) ' +
+        "VALUES (gen_random_uuid(), $1::uuid, $2, $3, '', $4::jsonb, 'draft', $5, 0) " +
+        'RETURNING id::text AS id',
+        [owner, title, slug, JSON.stringify(ARTICLE.body), kind],
+      );
+      ids.push(row.rows[0]!.id);
+    };
+    try {
+      for (let index = 1; index <= 55; index++) {
+        await seed(AUTHOR_ID, 'Pesquisa Catalogo ' + index,
+          'pesquisa-catalogo-' + index, 'post');
+      }
+      await seed(EDITOR_ID, 'Pesquisa Catalogo Restrita', 'pesquisa-catalogo-editor', 'post');
+      await seed(AUTHOR_ID, '100% Rascunho', 'percentual-catalogo', 'page');
+
+      assert.equal((await fetch(base + endpoint)).status, 401);
+      for (const invalid of [
+        '?page=0', '?page=10001', '?page=1.5', '?kind=admin',
+        '?q=' + 'X'.repeat(81), '?search=true',
+      ]) {
+        assert.equal((await read(invalid)).status, 400, invalid);
+      }
+
+      const all = new Set<string>();
+      let nextPage: number | null = 1;
+      for (let expected = 1; expected <= 3; expected++) {
+        assert.equal(nextPage, expected);
+        const response = await read('?q=PESQUISA%20CATALOGO&kind=post&page=' + expected);
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+        const result = await response.json() as {
+          items: Array<{ id: string; title: string; kind: string; updatedAt: string }>;
+          nextPage: number | null;
+        };
+        assert.equal(result.items.length, expected === 3 ? 15 : 20);
+        for (const item of result.items) {
+          assert.equal(item.kind, 'post');
+          assert.ok(item.title.includes('Pesquisa Catalogo'));
+          assert.ok(!all.has(item.id), 'duplicated item between pages');
+          all.add(item.id);
+        }
+        nextPage = result.nextPage;
+      }
+      assert.equal(all.size, 55);
+      assert.equal(nextPage, null);
+      const editorVisible = await read('?q=pesquisa%20catalogo&page=3', editor);
+      assert.equal(editorVisible.status, 200);
+      assert.equal((await editorVisible.json() as { items: unknown[] }).items.length, 16);
+
+      const literal = await read('?q=100%25&kind=page');
+      assert.equal(literal.status, 200);
+      const matching = await literal.json() as { items: Array<{ title: string; kind: string }> };
+      assert.deepEqual(matching.items.map(item => item.title), ['100% Rascunho']);
+      const notWild = await read('?q=%25%25');
+      assert.equal((await notWild.json() as { items: unknown[] }).items.length, 0);
+      const missing = await read('?q=inexistente-especifico');
+      assert.equal((await missing.json() as { items: unknown[]; nextPage: number | null }).nextPage,
+        null);
+    } finally {
+      await pool.query('DELETE FROM cms_posts WHERE id = ANY($1::uuid[])', [ids]);
+    }
+  });
+
   await t.test('postagens publicadas entram no feed e possuem URL navegável', async () => {
     const creation = await request(base, '/api/admin/editorial/drafts', 'POST', {
       ...ARTICLE, title: 'Notícia principal', slug: 'noticia-principal', kind: 'post',

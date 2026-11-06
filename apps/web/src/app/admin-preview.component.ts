@@ -27,6 +27,10 @@ interface DraftListItem {
   readonly revision: number;
   readonly updatedAt: string;
 }
+interface DraftCatalogPage {
+  readonly items: readonly DraftListItem[];
+  readonly nextPage: number | null;
+}
 interface PersistedDraft {
   readonly id: string;
   readonly kind: 'post' | 'page';
@@ -76,6 +80,12 @@ export class AdminPreviewComponent {
   protected readonly revision = signal<number | null>(null);
   protected readonly draftList = signal<readonly DraftListItem[]>([]);
   protected readonly showDrafts = signal(false);
+  protected readonly draftQuery = signal('');
+  protected readonly draftKindFilter = signal<'all' | 'post' | 'page'>('all');
+  protected readonly draftAppliedQuery = signal('');
+  protected readonly draftAppliedKind = signal<'all' | 'post' | 'page'>('all');
+  protected readonly draftNextPage = signal<number | null>(null);
+  protected readonly draftSearchError = signal<string | null>(null);
   protected readonly showHistory = signal(false);
   protected readonly historyEntries = signal<readonly HistoryRevision[]>([]);
   protected readonly historyCursor = signal<number | null>(null);
@@ -135,18 +145,42 @@ export class AdminPreviewComponent {
     });
   }
 
-  protected listDrafts(): void {
+  protected changeDraftKind(value: string): void {
+    if (value === 'all' || value === 'post' || value === 'page') {
+      this.draftKindFilter.set(value);
+    }
+  }
+
+  protected listDrafts(loadMore = false): void {
     if (this.busy()) return;
+    const page = loadMore ? this.draftNextPage() : 1;
+    if (page === null) return;
+    // A pagination continuation always uses the last submitted search, even if
+    // someone has already typed a new (not yet submitted) filter in the input.
+    const q = loadMore ? this.draftAppliedQuery() : this.draftQuery().trim();
+    const kind = loadMore ? this.draftAppliedKind() : this.draftKindFilter();
     this.busy.set(true);
-    this.saveError.set(null);
-    this.http.get<readonly DraftListItem[]>('/api/admin/editorial/drafts').subscribe({
-      next: items => {
-        this.draftList.set(items);
-        this.showDrafts.set(true);
+    this.draftSearchError.set(null);
+    this.showDrafts.set(true);
+    const url = '/api/admin/editorial/drafts/catalog?page=' + page
+      + '&kind=' + kind + '&q=' + encodeURIComponent(q);
+    this.http.get<DraftCatalogPage>(url).subscribe({
+      next: response => {
+        if (loadMore) {
+          const found = new Set(this.draftList().map(item => item.id));
+          this.draftList.update(items => [
+            ...items, ...response.items.filter(item => !found.has(item.id)),
+          ]);
+        } else {
+          this.draftList.set(response.items);
+          this.draftAppliedQuery.set(q);
+          this.draftAppliedKind.set(kind);
+        }
+        this.draftNextPage.set(response.nextPage);
         this.busy.set(false);
       },
       error: () => {
-        this.saveError.set('Não foi possível carregar os rascunhos. Verifique sua sessão.');
+        this.draftSearchError.set('Não foi possível pesquisar os rascunhos. Verifique sua sessão.');
         this.busy.set(false);
       },
     });
