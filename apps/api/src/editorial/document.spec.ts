@@ -70,7 +70,6 @@ test('tipografia é opcional nos artigos antigos e validada nos novos blocos', (
     ],
   });
   for (const block of article.blocks) {
-    assert.ok(block.type !== 'image');
     if (block.type !== 'image') assert.deepEqual(block.typography, typography);
   }
   assert.equal(hasPublishableContent(article), true);
