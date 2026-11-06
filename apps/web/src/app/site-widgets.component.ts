@@ -7,10 +7,14 @@ interface WidgetItem {
  readonly id: string; readonly title: string; readonly slug: string;
  readonly kind: 'post' | 'page'; readonly views?: number;
 }
+interface WidgetButton {
+ readonly id: string; readonly label: string; readonly hoverText: string;
+ readonly href: string; readonly enabled: boolean; readonly position: number;
+}
 interface DisplayWidget {
- readonly key: 'latest-posts' | 'popular-posts' | 'page-links' | 'text';
+ readonly key: 'latest-posts' | 'popular-posts' | 'page-links' | 'text' | 'buttons';
  readonly title: string; readonly position: number; readonly content: string;
- readonly items: readonly WidgetItem[];
+ readonly items: readonly WidgetItem[]; readonly buttons?: readonly WidgetButton[];
 }
 @Component({
  selector: 'blog-site-widgets', standalone: true, imports: [RouterLink],
@@ -19,7 +23,24 @@ interface DisplayWidget {
      @for (widget of widgets(); track widget.key) {
        <section class="panel site-widget" [attr.data-widget]="widget.key">
          <h2>{{ widget.title }}</h2>
-         @if (widget.key === 'text') {
+         @if (widget.key === 'buttons') {
+           <div class="widget-button-list" data-testid="public-buttons">
+             @for (button of widget.buttons ?? []; track button.id) {
+               <div class="widget-button-entry">
+                 <a class="widget-action-button" [href]="button.href"
+                   [attr.target]="button.href.startsWith('http://') || button.href.startsWith('https://') ? '_blank' : null"
+                   [attr.rel]="button.href.startsWith('http://') || button.href.startsWith('https://') ? 'noopener noreferrer' : null"
+                   [attr.title]="button.hoverText || null"
+                   [attr.aria-describedby]="button.hoverText ? 'widget-tip-' + button.id : null">
+                   {{ button.label }}
+                 </a>
+                 @if (button.hoverText) {
+                   <span class="widget-button-tooltip" [id]="'widget-tip-' + button.id" role="note">{{ button.hoverText }}</span>
+                 }
+               </div>
+             }
+           </div>
+         } @else if (widget.key === 'text') {
            <p class="widget-text">{{ widget.content }}</p>
          } @else {
            <ul class="widget-links">

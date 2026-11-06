@@ -1,14 +1,15 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { ButtonGadgetAdminComponent } from './button-gadget-admin.component';
 interface WidgetConfig {
- readonly key: 'latest-posts' | 'popular-posts' | 'page-links' | 'text';
+ readonly key: 'latest-posts' | 'popular-posts' | 'page-links' | 'text' | 'buttons';
  readonly title: string; readonly enabled: boolean;
  readonly position: number; readonly content: string;
 }
 interface Draft { readonly id: string; readonly title: string; readonly kind: 'post' | 'page' }
 @Component({
- selector: 'blog-admin-site', standalone: true, imports: [RouterLink],
+ selector: 'blog-admin-site', standalone: true, imports: [RouterLink, ButtonGadgetAdminComponent],
  template: `
  <section class="container">
    <a routerLink="/admin">Voltar ao painel</a>
@@ -22,7 +23,8 @@ interface Draft { readonly id: string; readonly title: string; readonly kind: 'p
      <section class="panel" [attr.data-widget-config]="entry.key">
        <h3>{{ entry.key === 'latest-posts' ? 'Últimas postagens' :
          entry.key === 'popular-posts' ? 'Mais populares' :
-         entry.key === 'page-links' ? 'Páginas' : 'Gadget de texto' }}</h3>
+         entry.key === 'page-links' ? 'Páginas' :
+         entry.key === 'buttons' ? 'Botões com hover e link' : 'Gadget de texto' }}</h3>
        <div class="widget-settings">
          <label>
            <span>Título</span>
@@ -38,6 +40,9 @@ interface Draft { readonly id: string; readonly title: string; readonly kind: 'p
            <span><input type="checkbox" [checked]="entry.enabled" #enabled
              (change)="change(entry.key,'enabled',enabled.checked)" /> Exibir no site</span>
          </label>
+         @if (entry.key === 'buttons') {
+           <blog-button-gadget-admin />
+         }
          @if (entry.key === 'text') {
            <label class="full">
              <span>Texto do gadget (sem HTML)</span>
