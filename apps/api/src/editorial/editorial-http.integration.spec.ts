@@ -142,6 +142,101 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
     assert.equal(oldRevision.status, 409);
   });
 
+
+  await t.test('histórico seguro, restauração real, revisão nova e rollback PostgreSQL', async () => {
+    const detail = '/api/admin/editorial/drafts/' + page.id;
+    const history = detail + '/revisions';
+    const restore = detail + '/restore';
+
+    // GET de versões é privado; escrita exige CSRF e origem canônica.
+    const anonymous = await fetch(base + history);
+    assert.equal(anonymous.status, 401);
+    const invalidPagination = await fetch(base + history + '?limit=21',
+      { headers: headers(author, false) });
+    assert.equal(invalidPagination.status, 400);
+    const unknownQuery = await fetch(base + history + '?admin=true',
+      { headers: headers(author, false) });
+    assert.equal(unknownQuery.status, 400);
+    const firstPage = await fetch(base + history + '?limit=1',
+      { headers: headers(author, false) });
+    assert.equal(firstPage.status, 200);
+    assert.equal(firstPage.headers.get('cache-control'), 'no-store');
+    const first = await firstPage.json() as {
+      items: Array<{ revision: number; snapshot: { title: string; body: unknown } }>;
+      nextBeforeRevision: number | null;
+    };
+    assert.deepEqual(first.items.map(x => x.revision), [1]);
+    assert.equal(first.nextBeforeRevision, 1);
+    const nextPage = await fetch(base + history + '?limit=1&beforeRevision=1',
+      { headers: headers(author, false) });
+    const second = await nextPage.json() as typeof first;
+    assert.equal(nextPage.status, 200);
+    assert.deepEqual(second.items.map(x => x.revision), [0]);
+    assert.equal(second.nextBeforeRevision, null);
+    assert.equal(second.items[0]?.snapshot.title, ARTICLE.title);
+
+    const noCsrf = await request(base, restore, 'POST',
+      { targetRevision: 0, expectedRevision: 1 }, author, false);
+    assert.equal(noCsrf.status, 403);
+    const badOrigin = await request(base, restore, 'POST',
+      { targetRevision: 0, expectedRevision: 1 }, author, true, 'https://evil.invalid');
+    assert.equal(badOrigin.status, 403);
+    const unexpectedField = await request(base, restore, 'POST',
+      { targetRevision: 0, expectedRevision: 1, role: 'admin' }, author);
+    assert.equal(unexpectedField.status, 400);
+    const impossible = await request(base, restore, 'POST',
+      { targetRevision: 7, expectedRevision: 1 }, author);
+    assert.equal(impossible.status, 400);
+    const stale = await request(base, restore, 'POST',
+      { targetRevision: 0, expectedRevision: 0 }, author);
+    assert.equal(stale.status, 409);
+
+    const recovered = await request(base, restore, 'POST',
+      { targetRevision: 0, expectedRevision: 1 }, author);
+    assert.equal(recovered.status, 200);
+    page = await recovered.json() as Draft;
+    assert.equal(page.revision, 2);
+    assert.equal(page.title, ARTICLE.title);
+    assert.equal(page.slug, ARTICLE.slug);
+    assert.deepEqual(page.body, ARTICLE.body);
+
+    const revisions = await pool.query<{
+      revision: string; editor_id: string; snapshot: { title: string };
+    }>(
+      'SELECT revision::text, editor_id::text, snapshot FROM cms_post_revisions ' +
+      'WHERE post_id=$1::uuid ORDER BY revision', [page.id],
+    );
+    assert.deepEqual(revisions.rows.map(x => x.revision), ['0', '1', '2']);
+    assert.equal(revisions.rows[0]?.snapshot.title, ARTICLE.title);
+    assert.equal(revisions.rows[1]?.snapshot.title.startsWith('Título '), true);
+    assert.equal(revisions.rows[2]?.editor_id, AUTHOR_ID);
+
+    const secondConflict = await request(base, restore, 'POST',
+      { targetRevision: 0, expectedRevision: 1 }, author);
+    assert.equal(secondConflict.status, 409);
+
+    // The article UPDATE must roll back if the new history snapshot cannot be inserted.
+    await pool.query(
+      "ALTER TABLE cms_post_revisions ADD CONSTRAINT ci_block_restore " +
+      "CHECK (snapshot->>'title' <> 'Guia de uso') NOT VALID",
+    );
+    try {
+      const failed = await request(base, restore, 'POST',
+        { targetRevision: 0, expectedRevision: 2 }, author);
+      assert.equal(failed.status, 503);
+      const after = await fetch(base + detail, { headers: headers(author, false) });
+      assert.equal(after.status, 200);
+      assert.deepEqual(await after.json(), page);
+      const count = await pool.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM cms_post_revisions WHERE post_id=$1::uuid',
+        [page.id],
+      );
+      assert.equal(count.rows[0]?.count, '3');
+    } finally {
+      await pool.query('ALTER TABLE cms_post_revisions DROP CONSTRAINT ci_block_restore');
+    }
+  });
+
   await t.test('editor publica página com conteúdo persistido; feed não recebe página', async () => {
     const publication = await request(base,
       '/api/admin/editorial/drafts/' + page.id + '/publish',

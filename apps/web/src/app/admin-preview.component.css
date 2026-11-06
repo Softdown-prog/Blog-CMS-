@@ -99,3 +99,14 @@ button.remove-action { background: #fff; color: #8a2630; border: 1px solid #deb6
  .draft-persistence-row > * { flex: 1 1 100%; }
  .draft-persistence-row select { max-width: none; }
 }
+
+/* Read-only editorial revision preview, keyboard and mobile friendly. */
+.historical-panel { margin: 1rem 0; display: grid; gap: .7rem; }
+.historical-panel select { width: 100%; min-width: 0; max-width: 100%; }
+.historical-preview { display: grid; gap: .45rem; overflow-wrap: anywhere; }
+.historical-preview p { margin: .25rem 0; }
+.historical-blocks { max-height: 22rem; overflow: auto; border: 1px solid #aebccc;
+  border-radius: .55rem; padding: .6rem .8rem; }
+.historical-blocks p { white-space: pre-wrap; overflow-wrap: anywhere; margin: .6rem 0; }
+.historical-panel button { min-height: 44px; }
+.historical-panel [role=alert] { color: #a32935; font-weight: 600; }
