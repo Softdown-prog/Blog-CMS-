@@ -245,7 +245,7 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
     const published = await publication.json() as Draft;
     assert.equal(published.status, 'published');
     assert.equal(published.kind, 'page');
-    assert.equal(published.revision, 2);
+    assert.equal(published.revision, 3);
     const publicPage = await fetch(base + '/api/public/pages/guia-de-uso');
     assert.equal(publicPage.status, 200);
     assert.equal((await publicPage.json() as Draft).title, page.title);
