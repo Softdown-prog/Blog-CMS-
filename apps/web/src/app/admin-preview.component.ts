@@ -27,6 +27,9 @@ interface DraftListItem {
   readonly revision: number;
   readonly updatedAt: string;
 }
+interface ScheduledListItem extends DraftListItem {
+  readonly scheduledAt: string;
+}
 interface PersistedDraft {
   readonly id: string;
   readonly kind: 'post' | 'page';
@@ -34,7 +37,8 @@ interface PersistedDraft {
   readonly slug: string;
   readonly excerpt: string;
   readonly revision: number;
-  readonly status: 'draft' | 'published';
+  readonly status: 'draft' | 'scheduled' | 'published';
+  readonly scheduledAt: string | null;
   readonly body: EditorialDocumentV1;
 }
 
@@ -76,6 +80,11 @@ export class AdminPreviewComponent {
   protected readonly revision = signal<number | null>(null);
   protected readonly draftList = signal<readonly DraftListItem[]>([]);
   protected readonly showDrafts = signal(false);
+  protected readonly showScheduled = signal(false);
+  protected readonly scheduledList = signal<readonly ScheduledListItem[]>([]);
+  protected readonly scheduled = signal(false);
+  protected readonly scheduledAt = signal<string | null>(null);
+  protected readonly scheduleLocalTime = signal('');
   protected readonly showHistory = signal(false);
   protected readonly historyEntries = signal<readonly HistoryRevision[]>([]);
   protected readonly historyCursor = signal<number | null>(null);
@@ -94,7 +103,7 @@ export class AdminPreviewComponent {
     this.navigationBaseline() !== null && this.signature() !== this.navigationBaseline());
 
   constructor() {
-    // A bancada abre com texto de exemplo, mas isso não conta como digitação.
+    // Initial example content is not an edit by the user.
     this.navigationBaseline.set(this.signature());
     const queryId = this.route.snapshot.queryParamMap.get('draft');
     if (queryId && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(queryId)) {
@@ -109,14 +118,13 @@ export class AdminPreviewComponent {
     });
   }
 
-  /** Route navigation is cancelable; no write or silent draft discard happens here. */
+  /** Navigation is cancelable; do not silently discard local work. */
   confirmNavigation(): boolean {
     if (this.busy()) return false;
     return !this.hasPendingChanges()
       || window.confirm('Existem alterações não salvas na postagem. Sair sem salvar?');
   }
 
-  /** Browser-owned confirmation on refresh/close (not guaranteed on every mobile browser). */
   @HostListener('window:beforeunload', ['$event'])
   onBeforeUnload(event: BeforeUnloadEvent): void {
     if (this.busy() || this.hasPendingChanges()) {
@@ -146,6 +154,9 @@ export class AdminPreviewComponent {
     this.blocks.set([{ ...createWorkbenchBlock(1, 'paragraph'), text: '' }]);
     this.nextBlockId = 2;
     this.published.set(false);
+    this.scheduled.set(false);
+    this.scheduledAt.set(null);
+    this.scheduleLocalTime.set('');
     this.savedSignature.set(null);
     this.saveMessage.set(null);
     this.saveError.set(null);
@@ -170,6 +181,119 @@ export class AdminPreviewComponent {
       error: () => {
         this.saveError.set('Não foi possível carregar os rascunhos. Verifique sua sessão.');
         this.busy.set(false);
+      },
+    });
+  }
+
+  protected listScheduled(): void {
+    if (!this.canPublish() || this.busy()) return;
+    this.busy.set(true);
+    this.saveError.set(null);
+    this.http.get<readonly ScheduledListItem[]>('/api/admin/editorial/scheduled').subscribe({
+      next: rows => {
+        this.scheduledList.set(rows);
+        this.showScheduled.set(true);
+        this.busy.set(false);
+      },
+      error: () => {
+        this.saveError.set('Não foi possível consultar a fila de publicações.');
+        this.busy.set(false);
+      },
+    });
+  }
+
+  protected selectScheduled(id: string): void {
+    if (id) this.loadDraft(id, false);
+  }
+
+  private localDateTime(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    const pad = (part: number): string => String(part).padStart(2, '0');
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+      + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+  }
+
+  protected scheduleDraft(): void {
+    const id = this.draftId();
+    const revision = this.revision();
+    if (!this.canPublish() || !id || revision === null || this.busy() || this.published() || this.scheduled()) return;
+    if (this.unsaved()) {
+      this.saveError.set('Salve as alterações antes de agendar a postagem.');
+      return;
+    }
+    const local = this.scheduleLocalTime();
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)
+      || this.localDateTime(local) !== local) {
+      this.saveError.set('Selecione data e hora válidas no horário local.');
+      return;
+    }
+    const date = new Date(local);
+    if (date.getTime() <= Date.now()) {
+      this.saveError.set('O agendamento deve ser para uma data e hora futuras.');
+      return;
+    }
+    const csrf = this.csrf();
+    if (!csrf) {
+      this.saveError.set('Sessão sem token CSRF. Entre novamente.');
+      return;
+    }
+    this.busy.set(true);
+    this.saveError.set(null);
+    this.saveMessage.set(null);
+    this.http.post<PersistedDraft>('/api/admin/editorial/drafts/' + id + '/schedule',
+      { expectedRevision: revision, scheduledAt: date.toISOString() },
+      { headers: { 'X-CMS-CSRF': csrf } }).subscribe({
+      next: post => {
+        this.revision.set(post.revision);
+        this.scheduled.set(true);
+        this.scheduledAt.set(post.scheduledAt);
+        this.busy.set(false);
+        this.saveMessage.set('Publicação agendada. Será publicada automaticamente no horário definido.');
+      },
+      error: (error: unknown) => {
+        this.busy.set(false);
+        this.saveError.set(error instanceof HttpErrorResponse && error.status === 409
+          ? 'Outra sessão alterou a postagem. Reabra antes de agendar.'
+          : error instanceof HttpErrorResponse && error.status === 422
+            ? 'O artigo precisa estar pronto para publicação.'
+            : error instanceof HttpErrorResponse && error.status === 400
+              ? 'Data ou horário inválidos. Escolha um instante futuro.'
+              : 'Não foi possível agendar. A postagem permanece como estava.');
+      },
+    });
+  }
+
+  protected cancelSchedule(): void {
+    const id = this.draftId();
+    const revision = this.revision();
+    if (!this.canPublish() || !this.scheduled() || !id || revision === null || this.busy()) return;
+    if (this.unsaved()) {
+      this.saveError.set('Reabra o texto para descartar alterações locais antes de cancelar.');
+      return;
+    }
+    if (!window.confirm('Cancelar a publicação automática e retornar o texto para rascunho?')) return;
+    const csrf = this.csrf();
+    if (!csrf) {
+      this.saveError.set('Sessão sem token CSRF. Entre novamente.');
+      return;
+    }
+    this.busy.set(true);
+    this.saveError.set(null);
+    this.saveMessage.set(null);
+    this.http.post<PersistedDraft>('/api/admin/editorial/drafts/' + id + '/cancel-schedule',
+      { expectedRevision: revision }, { headers: { 'X-CMS-CSRF': csrf } }).subscribe({
+      next: post => {
+        this.revision.set(post.revision);
+        this.scheduled.set(false);
+        this.scheduledAt.set(null);
+        this.scheduleLocalTime.set('');
+        this.busy.set(false);
+        this.saveMessage.set('Agendamento cancelado. O texto voltou para rascunho.');
+      },
+      error: () => {
+        this.busy.set(false);
+        this.saveError.set('O agendamento mudou ou já foi publicado. Atualize a lista.');
       },
     });
   }
@@ -202,6 +326,9 @@ export class AdminPreviewComponent {
         this.nextBlockId = blocks.length + 1;
         this.clearHistory();
         this.published.set(false);
+        this.scheduled.set(post.status === 'scheduled');
+        this.scheduledAt.set(post.scheduledAt ?? null);
+        this.scheduleLocalTime.set(post.scheduledAt ? this.localDateTime(post.scheduledAt) : '');
         this.savedSignature.set(this.signature());
         this.navigationBaseline.set(this.signature());
         this.saveMessage.set('Rascunho recuperado do banco.');
@@ -335,7 +462,7 @@ export class AdminPreviewComponent {
   }
 
   protected saveDraft(): void {
-    if (this.busy() || this.published()) return;
+    if (this.busy() || this.published() || this.scheduled()) return;
     let body: EditorialDocumentV1;
     try {
       body = workbenchDocument(this.blocks());
@@ -372,7 +499,7 @@ export class AdminPreviewComponent {
         this.revision.set(post.revision);
         this.kind.set(post.kind);
         this.savedSignature.set(signature);
-        // If the user kept typing during the HTTP request, those edits remain pending.
+        // In-flight typing remains marked as pending after the request.
         this.navigationBaseline.set(signature);
         this.saveMessage.set('Rascunho salvo no PostgreSQL (revisão ' + post.revision + ').');
         this.busy.set(false);
@@ -413,6 +540,8 @@ export class AdminPreviewComponent {
       next: post => {
         this.revision.set(post.revision);
         this.published.set(true);
+        this.scheduled.set(false);
+        this.scheduledAt.set(null);
         this.navigationBaseline.set(this.signature());
         this.busy.set(false);
         this.saveMessage.set('Publicado. O conteúdo está disponível na área pública.');

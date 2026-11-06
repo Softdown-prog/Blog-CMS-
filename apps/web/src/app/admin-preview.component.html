@@ -17,18 +17,22 @@
         <option value="page">Página fixa / tutorial</option>
       </select>
       <button type="button" data-testid="save-draft"
-        [disabled]="busy() || published()" (click)="saveDraft()">
+        [disabled]="busy() || published() || scheduled()" (click)="saveDraft()">
         {{ draftId() ? 'Salvar alterações' : 'Salvar rascunho' }}
       </button>
       @if (canPublish()) {
         <button type="button" data-testid="publish-draft"
-          [disabled]="busy() || !draftId() || published() || unsaved()"
+          [disabled]="busy() || !draftId() || published() || scheduled() || unsaved()"
           (click)="publishDraft()">Publicar</button>
       }
       <button type="button" data-testid="load-drafts" class="inline-action"
         [disabled]="busy()" (click)="listDrafts()">Meus rascunhos</button>
       <button type="button" data-testid="new-draft" class="inline-action"
         [disabled]="busy()" (click)="newDraft()">Novo texto</button>
+      @if (canPublish()) {
+        <button type="button" data-testid="load-scheduled" class="inline-action"
+          [disabled]="busy()" (click)="listScheduled()">Publicações agendadas</button>
+      }
     </div>
     @if (showDrafts()) {
       <label for="stored-draft">Rascunhos disponíveis</label>
@@ -42,6 +46,59 @@
         }
       </select>
       @if (draftList().length === 0) { <p>Nenhum rascunho disponível.</p> }
+    }
+    @if (showScheduled() && canPublish()) {
+      <div class="schedule-list" data-testid="scheduled-list">
+        <label for="scheduled-selector">Fila de publicações automáticas (até 50 próximas)</label>
+        <select id="scheduled-selector" data-testid="scheduled-selector" #scheduledChoice
+          [disabled]="busy()"
+          (change)="selectScheduled(scheduledChoice.value); scheduledChoice.value = ''">
+          <option value="">Escolha para reagendar ou cancelar...</option>
+          @for (entry of scheduledList(); track entry.id) {
+            <option [value]="entry.id">
+              {{ entry.title }} · {{ entry.scheduledAt | date:'dd/MM/yyyy HH:mm' }}
+            </option>
+          }
+        </select>
+        @if (scheduledList().length === 0) {
+          <p>Nenhuma publicação automática pendente.</p>
+        }
+      </div>
+    }
+    @if (canPublish() && draftId() && !published()) {
+      <section class="schedule-controls" data-testid="schedule-controls"
+        aria-label="Publicação automática">
+        <h2>{{ scheduled() ? 'Reagendar publicação' : 'Programar publicação' }}</h2>
+        @if (scheduledAt()) {
+          <p role="status" data-testid="scheduled-status">
+            Agendada para {{ scheduledAt() | date:'dd/MM/yyyy HH:mm' }}
+            (horário local). Até lá, o texto não aparece no site.
+          </p>
+          <p class="hint">Para alterar o conteúdo, cancele o agendamento e volte ao rascunho.</p>
+        }
+        <label for="schedule-datetime">
+          Data e hora de publicação (no seu fuso horário)
+          <input type="datetime-local" id="schedule-datetime"
+            data-testid="schedule-datetime" #scheduleInput
+            [value]="scheduleLocalTime()" [disabled]="busy()"
+            (input)="scheduleLocalTime.set(scheduleInput.value)" />
+        </label>
+        <div class="schedule-actions">
+          <button type="button" data-testid="schedule-submit"
+            [disabled]="busy() || unsaved() || !scheduleLocalTime()"
+            (click)="scheduleDraft()">
+            {{ scheduled() ? 'Salvar novo horário' : 'Agendar publicação' }}
+          </button>
+          @if (scheduled()) {
+            <button type="button" class="inline-action" data-testid="schedule-cancel"
+              [disabled]="busy() || unsaved()" (click)="cancelSchedule()">
+              Cancelar agendamento
+            </button>
+          }
+        </div>
+        <p class="hint">Para publicar imediatamente, use o botão Publicar.
+          Publicações agendadas são verificadas periodicamente pelo servidor.</p>
+      </section>
     }
     @if (saveError()) {
       <p role="alert" data-testid="editor-save-error">{{ saveError() }}</p>
@@ -58,7 +115,7 @@
   </section>
 
 
-  @if (draftId() && !published()) {
+  @if (draftId() && !published() && !scheduled()) {
     <section class="panel historical-panel" aria-label="Histórico de revisões" data-testid="draft-history">
       <div class="panel-head">
         <div>
@@ -121,9 +178,11 @@
           <p class="eyebrow">EDITOR DE {{ kind() === 'page' ? 'PÁGINA' : 'POSTAGEM' }}</p>
           <h2 id="editor-title">Escrever artigo</h2>
         </div>
-        <span class="state-tag">{{ published() ? 'Publicado' : draftId() ? (unsaved() ? 'Alterações não salvas' : 'Revisão ' + revision()) : 'Não salvo' }}</span>
+        <span class="state-tag">{{ published() ? 'Publicado' : scheduled() ? 'Agendado' : draftId() ? (unsaved() ? 'Alterações não salvas' : 'Revisão ' + revision()) : 'Não salvo' }}</span>
       </div>
 
+      <fieldset class="editor-locked" [disabled]="scheduled()">
+        <legend class="sr-only">Conteúdo editorial</legend>
       <div class="field">
         <label for="workbench-title">Título do artigo</label>
         <input id="workbench-title" data-testid="editor-title" #titleInput
@@ -293,7 +352,8 @@
         <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('list')">+ Lista</button>
         <button type="button" [disabled]="!canAddBlock()" (click)="addBlock('quote')">+ Citação</button>
       </div>
-      <p class="hint">O envio e o salvamento serão habilitados apenas depois da autenticação e dos testes de integração.</p>
+      <p class="hint">Salve o rascunho antes de agendar ou publicar; alterações locais não são enviadas automaticamente.</p>
+      </fieldset>
     </section>
 
     <aside class="inspector" aria-label="Ferramentas e pré-visualização">

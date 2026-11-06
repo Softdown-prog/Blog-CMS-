@@ -6,6 +6,9 @@ import test from 'node:test';
 import { NestFactory } from '@nestjs/core';
 import { Pool } from 'pg';
 import { AppModule } from '../app.module';
+import { ScheduledPublisherWorker } from './application/scheduled-worker';
+import { PgScheduledPublicationStore } from './application/postgres-scheduled';
+import { ScheduledPublicationDispatcher } from './application/scheduled-dispatcher';
 
 const AUTHOR_ID = '839e6d28-2466-46df-b8e7-425d05a2178b';
 const EDITOR_ID = '1972c899-7ee8-4f80-a260-dad43c9fc0ab';
@@ -21,7 +24,7 @@ const ARTICLE = {
 };
 interface Draft {
   id: string; kind: 'post' | 'page'; revision: number; slug: string;
-  status: 'draft' | 'published'; title: string; authorId: string;
+  status: 'draft' | 'scheduled' | 'published'; title: string; authorId: string;
   body: { schemaVersion: number; blocks: unknown[] };
 }
 interface CookiePair { session: string; csrf: string }
@@ -255,6 +258,230 @@ test('editor real: HTTP NestJS + sessões PostgreSQL + escrita atômica', async 
     const after = await fetch(base + '/api/admin/editorial/drafts/' + page.id,
       { headers: headers(editor, false) });
     assert.equal(after.status, 404);
+  });
+
+
+  // Time is manipulated only in this disposable database. Stop periodic
+  // polling to keep these assertions deterministic; runOnce remains enabled.
+  await app.get(ScheduledPublisherWorker).onApplicationShutdown();
+
+  await t.test('publica agora e agenda duas outras datas, sem duplicar nem antecipar', async () => {
+    const created: Draft[] = [];
+    for (let n = 1; n <= 3; n++) {
+      const response = await request(base, '/api/admin/editorial/drafts', 'POST', {
+        ...ARTICLE, title: 'Automática ' + n,
+        slug: 'automatico-' + n, kind: 'post',
+      }, editor);
+      assert.equal(response.status, 201);
+      created.push(await response.json() as Draft);
+    }
+    const [today, tomorrow, afterTomorrow] = created as [Draft, Draft, Draft];
+    const endpoint = (item: Draft) => '/api/admin/editorial/drafts/' + item.id;
+    const dayMs = 86_400_000;
+    const now = Date.now();
+    const firstDue = new Date(now + dayMs).toISOString();
+    const secondDue = new Date(now + 2 * dayMs).toISOString();
+
+    assert.equal((await fetch(base + '/api/admin/editorial/scheduled')).status, 401);
+    assert.equal((await fetch(base + '/api/admin/editorial/scheduled', {
+      headers: headers(author, false),
+    })).status, 403);
+    assert.equal((await request(base, endpoint(tomorrow) + '/schedule', 'POST',
+      { expectedRevision: 0, scheduledAt: firstDue }, author)).status, 403);
+    assert.equal((await request(base, endpoint(tomorrow) + '/schedule', 'POST',
+      { expectedRevision: 0, scheduledAt: firstDue }, editor, false)).status, 403);
+    assert.equal((await request(base, endpoint(tomorrow) + '/schedule', 'POST',
+      { expectedRevision: 0, scheduledAt: firstDue }, editor, true, 'https://evil.invalid')).status, 403);
+    assert.equal((await request(base, endpoint(tomorrow) + '/schedule', 'POST',
+      { expectedRevision: 0, scheduledAt: new Date(now - dayMs).toISOString() }, editor)).status, 400);
+    assert.equal((await request(base, endpoint(tomorrow) + '/schedule', 'POST',
+      { expectedRevision: 0, scheduledAt: firstDue, role: 'admin' }, editor)).status, 400);
+
+    const publishNow = await request(base, endpoint(today) + '/publish', 'POST',
+      { expectedRevision: 0 }, editor);
+    assert.equal(publishNow.status, 200);
+    assert.equal((await publishNow.json() as Draft).status, 'published');
+
+    for (const [item, at] of [[tomorrow, firstDue], [afterTomorrow, secondDue]] as const) {
+      const response = await request(base, endpoint(item) + '/schedule', 'POST',
+        { expectedRevision: 0, scheduledAt: at }, editor);
+      assert.equal(response.status, 200);
+      const payload = await response.json() as Draft & { scheduledAt: string };
+      assert.equal(payload.status, 'scheduled');
+      assert.equal(payload.revision, 1);
+      assert.equal(payload.scheduledAt, at);
+      assert.equal((await fetch(base + '/api/public/posts/' + item.slug)).status, 404);
+      assert.equal((await fetch(base + endpoint(item), {
+        headers: headers(author, false),
+      })).status, 404);
+    }
+
+    const queue = await fetch(base + '/api/admin/editorial/scheduled',
+      { headers: headers(editor, false) });
+    assert.equal(queue.status, 200);
+    assert.equal(queue.headers.get('cache-control'), 'no-store');
+    const scheduled = await queue.json() as Array<{ id: string; scheduledAt: string }>;
+    assert.ok(scheduled.some(x => x.id === tomorrow.id && x.scheduledAt === firstDue));
+    assert.ok(scheduled.some(x => x.id === afterTomorrow.id && x.scheduledAt === secondDue));
+
+    // Check that neither future date is published prematurely. Test only:
+    // move one date at a time into the past to simulate the passage of days
+    // while keeping published_at real, so the public endpoint's NOW() gate works.
+    const store = new PgScheduledPublicationStore(pool);
+    const clock = (at: string) => new ScheduledPublicationDispatcher(store, { nowIso: () => at });
+    const dueNow = (): string => new Date().toISOString();
+    const expireInDisposableDb = async (id: string): Promise<void> => {
+      await pool.query(
+        "UPDATE cms_posts SET scheduled_at=$2::timestamptz " +
+        "WHERE id=$1::uuid AND status='scheduled'",
+        [id, new Date(Date.now() - 30_000).toISOString()],
+      );
+    };
+    assert.deepEqual(await clock(new Date(now + dayMs / 2).toISOString()).runOnce(),
+      { ok: true, selected: 0, published: 0, skipped: 0 });
+    await expireInDisposableDb(tomorrow.id);
+    const [a, b] = await Promise.all([
+      clock(dueNow()).runOnce(),
+      clock(dueNow()).runOnce(),
+    ]);
+    assert.equal(a.ok && b.ok, true);
+    if (a.ok && b.ok) assert.equal(a.published + b.published, 1);
+    assert.equal((await fetch(base + '/api/public/posts/' + tomorrow.slug)).status, 200);
+    assert.equal((await fetch(base + '/api/public/posts/' + afterTomorrow.slug)).status, 404);
+    await expireInDisposableDb(afterTomorrow.id);
+    const future = await clock(dueNow()).runOnce();
+    assert.equal(future.ok, true);
+    if (future.ok) assert.equal(future.published, 1);
+    const duplicate = await clock(dueNow()).runOnce();
+    assert.deepEqual(duplicate, { ok: true, selected: 0, published: 0, skipped: 0 });
+    assert.equal((await fetch(base + '/api/public/posts/' + afterTomorrow.slug)).status, 200);
+
+    for (const item of [tomorrow, afterTomorrow]) {
+      const query = await pool.query<{
+        revision: string; origin_kind: string; system_key: string;
+        editor_id: string | null; snapshot: { status: string; scheduledAt: string | null };
+      }>(
+        'SELECT revision::text,origin_kind,system_key,editor_id::text,snapshot ' +
+        'FROM cms_post_revisions WHERE post_id=$1::uuid ORDER BY revision DESC LIMIT 1',
+        [item.id],
+      );
+      assert.deepEqual({
+        revision: query.rows[0]?.revision, origin: query.rows[0]?.origin_kind,
+        key: query.rows[0]?.system_key, editor: query.rows[0]?.editor_id,
+        status: query.rows[0]?.snapshot.status,
+        scheduledAt: query.rows[0]?.snapshot.scheduledAt,
+      }, {
+        revision: '2', origin: 'system', key: 'scheduled-publisher',
+        editor: null, status: 'published', scheduledAt: null,
+      });
+    }
+  });
+
+  await t.test('reagenda e cancela sem publicar, com proteção contra edição concorrente', async () => {
+    const response = await request(base, '/api/admin/editorial/drafts', 'POST', {
+      ...ARTICLE, title: 'Postagem cancelável', slug: 'agendamento-cancelavel', kind: 'post',
+    }, editor);
+    assert.equal(response.status, 201);
+    const item = await response.json() as Draft;
+    const path = '/api/admin/editorial/drafts/' + item.id;
+    const first = new Date(Date.now() + 86_400_000).toISOString();
+    const second = new Date(Date.now() + 172_800_000).toISOString();
+    assert.equal((await request(base, path + '/schedule', 'POST',
+      { expectedRevision: 0, scheduledAt: first }, editor)).status, 200);
+    assert.equal((await request(base, path + '/schedule', 'POST',
+      { expectedRevision: 0, scheduledAt: second }, editor)).status, 409);
+    const moved = await request(base, path + '/schedule', 'POST',
+      { expectedRevision: 1, scheduledAt: second }, editor);
+    assert.equal(moved.status, 200);
+    assert.equal((await moved.json() as Draft).revision, 2);
+    assert.equal((await request(base, path + '/cancel-schedule', 'POST',
+      { expectedRevision: 1 }, editor)).status, 409);
+    const noCsrf = await request(base, path + '/cancel-schedule', 'POST',
+      { expectedRevision: 2 }, editor, false);
+    assert.equal(noCsrf.status, 403);
+    const cancelled = await request(base, path + '/cancel-schedule', 'POST',
+      { expectedRevision: 2 }, editor);
+    assert.equal(cancelled.status, 200);
+    const restored = await cancelled.json() as Draft & { scheduledAt: string | null };
+    assert.equal(restored.status, 'draft');
+    assert.equal(restored.scheduledAt, null);
+    assert.equal(restored.revision, 3);
+    const dispatcher = new ScheduledPublicationDispatcher(new PgScheduledPublicationStore(pool), {
+      nowIso: () => new Date(Date.now() + 4 * 86_400_000).toISOString(),
+    });
+    const result = await dispatcher.runOnce();
+    assert.deepEqual(result, { ok: true, selected: 0, published: 0, skipped: 0 });
+    assert.equal((await fetch(base + '/api/public/posts/' + item.slug)).status, 404);
+    const detail = await fetch(base + path, { headers: headers(editor, false) });
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json() as Draft).status, 'draft');
+  });
+
+  await t.test('se a gravação do histórico falhar, publicação automática faz rollback', async () => {
+    const created = await request(base, '/api/admin/editorial/drafts', 'POST', {
+      ...ARTICLE, title: 'Verifica rollback automático',
+      slug: 'verifica-rollback-automatico', kind: 'post',
+    }, editor);
+    assert.equal(created.status, 201);
+    const draft = await created.json() as Draft;
+    const path = '/api/admin/editorial/drafts/' + draft.id;
+    const due = new Date(Date.now() + 86_400_000).toISOString();
+    assert.equal((await request(base, path + '/schedule', 'POST',
+      { expectedRevision: 0, scheduledAt: due }, editor)).status, 200);
+    await pool.query(
+      "UPDATE cms_posts SET scheduled_at=$2::timestamptz WHERE id=$1::uuid",
+      [draft.id, new Date(Date.now() - 30_000).toISOString()],
+    );
+    const dispatcher = new ScheduledPublicationDispatcher(new PgScheduledPublicationStore(pool), {
+      nowIso: () => new Date().toISOString(),
+    });
+    await pool.query(
+      "ALTER TABLE cms_post_revisions ADD CONSTRAINT ci_scheduled_history_fail " +
+      "CHECK (snapshot->>'title' <> 'Verifica rollback automático') NOT VALID",
+    );
+    try {
+      await assert.rejects(dispatcher.runOnce());
+      const draftStillScheduled = await pool.query<{ status: string; revision: string }>(
+        'SELECT status,revision::text FROM cms_posts WHERE id=$1::uuid', [draft.id],
+      );
+      assert.equal(draftStillScheduled.rows[0]?.status, 'scheduled');
+      assert.equal(draftStillScheduled.rows[0]?.revision, '1');
+    } finally {
+      await pool.query('ALTER TABLE cms_post_revisions DROP CONSTRAINT ci_scheduled_history_fail');
+    }
+    const result = await dispatcher.runOnce();
+    assert.deepEqual(result, { ok: true, selected: 1, published: 1, skipped: 0 });
+  });
+
+  await t.test('worker NestJS real processa item vencido após indisponibilidade', async () => {
+    const created = await request(base, '/api/admin/editorial/drafts', 'POST', {
+      ...ARTICLE, title: 'Processamento após retorno',
+      slug: 'processamento-apos-retorno', kind: 'post',
+    }, editor);
+    assert.equal(created.status, 201);
+    const draft = await created.json() as Draft;
+    const path = '/api/admin/editorial/drafts/' + draft.id;
+    assert.equal((await request(base, path + '/schedule', 'POST', {
+      expectedRevision: 0, scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
+    }, editor)).status, 200);
+
+    // Avoid a race with the periodic timer while asserting the explicit
+    // recovery pass. The registered worker remains callable after shutdown.
+    const worker = app.get(ScheduledPublisherWorker);
+    await worker.onApplicationShutdown();
+    // Only a disposable CI database is mutated here. A real downtime keeps
+    // the overdue timestamp in PostgreSQL until the API worker restarts.
+    await pool.query(
+      "UPDATE cms_posts SET scheduled_at=$2::timestamptz " +
+      "WHERE id=$1::uuid AND status='scheduled'",
+      [draft.id, new Date(Date.now() - 30_000).toISOString()],
+    );
+    const first = await worker.runOnce();
+    assert.deepEqual(first, { ok: true, selected: 1, published: 1, skipped: 0 });
+    assert.equal((await fetch(base + '/api/public/posts/' + draft.slug)).status, 200);
+    assert.deepEqual(await worker.runOnce(), {
+      ok: true, selected: 0, published: 0, skipped: 0,
+    });
   });
 
   await t.test('postagens publicadas entram no feed e possuem URL navegável', async () => {

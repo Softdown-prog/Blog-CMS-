@@ -110,3 +110,22 @@ button.remove-action { background: #fff; color: #8a2630; border: 1px solid #deb6
 .historical-blocks p { white-space: pre-wrap; overflow-wrap: anywhere; margin: .6rem 0; }
 .historical-panel button { min-height: 44px; }
 .historical-panel [role=alert] { color: #a32935; font-weight: 600; }
+
+/* Real future publication, distinct from the draft save and preview. */
+.schedule-controls { display: grid; gap: .6rem; padding: .85rem;
+  border: 1px solid #bad3e5; border-radius: .7rem; background: #f1f7fc;
+  min-width: 0; }
+.schedule-controls h2 { margin: 0; font-size: 1.1rem; }
+.schedule-controls label { display: grid; gap: .45rem; min-width: 0; }
+.schedule-controls input { max-width: 340px; }
+.schedule-controls [role=status] { color: #214e32; font-weight: 650; }
+.schedule-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.schedule-list { min-width: 0; display: grid; gap: .4rem; }
+.schedule-list select { min-width: 0; max-width: 100%; }
+@media(max-width:540px) { .schedule-controls input { max-width: 100%; }
+  .schedule-actions > * { flex: 1 1 100%; }
+}
+
+.editor-locked { padding: 0; margin: 0; min-width: 0; border: 0; }
+.editor-locked:disabled { color: inherit; }
+.editor-locked[disabled] { opacity: .82; }

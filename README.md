@@ -86,3 +86,10 @@ Veja [Histórico e recuperação de versões](docs/EDITORIAL_HISTORY_HTTP.md).
 O painel Angular confirma saída com edições locais não salvas, inclusive ao
 encerrar a sessão. Essa proteção não é autossalvamento e não substitui o
 botão **Salvar rascunho**. Consulte [proteção de navegação](docs/EDITOR_NAVIGATION_SAFETY.md).
+
+## Publicação automática
+
+Depois de salvar uma postagem, editores podem escolher **Publicar** agora ou
+**Agendar publicação** para outra data e hora no editor Angular. Os agendamentos
+são persistidos no PostgreSQL e executados pelo NestJS (requer backend ativo).
+Veja [documentação de agendamento automático](docs/AUTOMATIC_PUBLICATION.md).
