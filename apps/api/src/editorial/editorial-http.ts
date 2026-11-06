@@ -32,6 +32,9 @@ export interface DraftSummary {
   readonly updatedAt: string;
 }
 export interface SavedDraft extends EditorialPost { readonly kind: ContentKind }
+export interface ScheduledSummary extends DraftSummary {
+  readonly scheduledAt: string;
+}
 interface DraftRow extends QueryResultRow {
   readonly id: string;
   readonly title: string;
@@ -167,11 +170,27 @@ export class EditorialHttpService {
     }));
   }
 
+  async listScheduled(actor: EditorialActor): Promise<readonly ScheduledSummary[]> {
+    // An author can browse only owned drafts, never the manager's publication queue.
+    if (actor.role === 'author') throw new ForbiddenException('Acesso restrito à programação.');
+    const result = await this.db().query<DraftRow & { scheduled_at: Date }>(
+      `SELECT id::text,title,slug,content_kind,revision::text,updated_at,scheduled_at
+       FROM cms_posts WHERE status='scheduled'
+       ORDER BY scheduled_at ASC,id ASC LIMIT 50`,
+    );
+    return result.rows.map(row => ({
+      id: row.id, title: row.title, slug: row.slug,
+      kind: row.content_kind, revision: safeRevision(row.revision),
+      updatedAt: row.updated_at.toISOString(), scheduledAt: row.scheduled_at.toISOString(),
+    }));
+  }
+
   async getDraft(actor: EditorialActor, id: string): Promise<SavedDraft> {
     uuid(id);
     const stored = await new PgEditorialRepository(this.db()).findById(id);
     // Drafts of other authors are indistinguishable from missing drafts.
-    if (!stored || stored.status !== 'draft'
+    if (!stored || (stored.status !== 'draft'
+      && !(stored.status === 'scheduled' && actor.role !== 'author'))
       || (actor.role === 'author' && stored.authorId !== actor.id)) {
       throw new NotFoundException('Rascunho não encontrado.');
     }
@@ -229,6 +248,31 @@ export class EditorialHttpService {
     return { ...restored, kind: await this.kind(id) };
   }
 
+  async scheduleDraft(actor: EditorialActor, id: string, raw: unknown): Promise<SavedDraft> {
+    uuid(id);
+    const input = validationObject(raw, ['expectedRevision', 'scheduledAt']);
+    if (!validRevision(input['expectedRevision']) || typeof input['scheduledAt'] !== 'string') {
+      throw new BadRequestException('Agendamento inválido.');
+    }
+    const post = unwrap(await this.commands().scheduleDraft(actor, {
+      postId: id, expectedRevision: input['expectedRevision'],
+      scheduledAt: input['scheduledAt'],
+    }));
+    return { ...post, kind: await this.kind(id) };
+  }
+
+  async cancelSchedule(actor: EditorialActor, id: string, raw: unknown): Promise<SavedDraft> {
+    uuid(id);
+    const input = validationObject(raw, ['expectedRevision']);
+    if (!validRevision(input['expectedRevision'])) {
+      throw new BadRequestException('Revisão inválida.');
+    }
+    const post = unwrap(await this.commands().cancelSchedule(actor, {
+      postId: id, expectedRevision: input['expectedRevision'],
+    }));
+    return { ...post, kind: await this.kind(id) };
+  }
+
   async publishDraft(actor: EditorialActor, id: string, raw: unknown): Promise<SavedDraft> {
     uuid(id);
     const obj = validationObject(raw, ['expectedRevision']);
@@ -274,6 +318,15 @@ export class EditorialHttpController {
     this.cache(res);
     const actor = await this.actor('list-posts', req);
     return this.execute(() => this.editorial.listDrafts(actor));
+  }
+
+  @Get('scheduled')
+  async scheduled(
+    @Req() req: RequestMeta, @Res({ passthrough: true }) res: HeaderResponse,
+  ): Promise<readonly ScheduledSummary[]> {
+    this.cache(res);
+    const actor = await this.actor('list-posts', req);
+    return this.execute(() => this.editorial.listScheduled(actor));
   }
 
   @Get('drafts/:id')
@@ -326,6 +379,28 @@ export class EditorialHttpController {
     this.cache(res);
     const actor = await this.actor('restore-draft', req);
     return this.execute(() => this.editorial.restoreRevision(actor, id, body));
+  }
+
+  @Post('drafts/:id/schedule')
+  @HttpCode(200)
+  async schedule(
+    @Req() req: RequestMeta, @Param('id') id: string, @Body() body: unknown,
+    @Res({ passthrough: true }) res: HeaderResponse,
+  ): Promise<SavedDraft> {
+    this.cache(res);
+    const actor = await this.actor('schedule-post', req);
+    return this.execute(() => this.editorial.scheduleDraft(actor, id, body));
+  }
+
+  @Post('drafts/:id/cancel-schedule')
+  @HttpCode(200)
+  async unschedule(
+    @Req() req: RequestMeta, @Param('id') id: string, @Body() body: unknown,
+    @Res({ passthrough: true }) res: HeaderResponse,
+  ): Promise<SavedDraft> {
+    this.cache(res);
+    const actor = await this.actor('cancel-schedule', req);
+    return this.execute(() => this.editorial.cancelSchedule(actor, id, body));
   }
 
   @Post('drafts/:id/publish')

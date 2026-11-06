@@ -80,3 +80,10 @@ Nenhuma destas etapas autoriza mudanças na VPS, no banco de produção ou deplo
 A API e o editor Angular permitem consultar versões anteriores de rascunhos e
 recuperar uma como nova revisão com CAS/CSRF, sem apagar o histórico.
 Veja [Histórico e recuperação de versões](docs/EDITORIAL_HISTORY_HTTP.md).
+
+## Publicação automática
+
+Depois de salvar uma postagem, editores podem escolher **Publicar** agora ou
+**Agendar publicação** para outra data e hora no editor Angular. Os agendamentos
+são persistidos no PostgreSQL e executados pelo NestJS (requer backend ativo).
+Veja [documentação de agendamento automático](docs/AUTOMATIC_PUBLICATION.md).
