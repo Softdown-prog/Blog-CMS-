@@ -30,6 +30,12 @@ CMS de blog próprio, hospedado exclusivamente na VPS. Repositório em implanta�
   a navegação pública com respostas HTTP simuladas nos testes do navegador.
 - `docs`: documentação e prioridades verificáveis.
 
+**Organização pública em desenvolvimento:** feed de postagens e páginas fixas
+separados, widgets nativos (últimas, populares, atalhos, texto puro) e configurações
+administrativas em `/admin/site`. A proposta SQL 004 é somente para CI e não
+foi aplicada à VPS. Ver [páginas e widgets](docs/CONTENT_LAYOUT_PROPOSAL.md).
+A popularidade só existe com contagem real e chave de métricas configurada.
+
 **Próxima prioridade:** fechar o fluxo real escrever -> salvar -> publicar ->
 ler, antes de adicionar mais módulos periféricos. Critérios e bloqueios:
 [docs/CMS_MVP_PRIORITIES.md](docs/CMS_MVP_PRIORITIES.md).

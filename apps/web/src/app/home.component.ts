@@ -3,6 +3,7 @@ import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { catchError, map, of } from 'rxjs';
+import { SiteWidgetsComponent } from './site-widgets.component';
 
 interface PostSummary {
   readonly id: string;
@@ -19,13 +20,13 @@ type PostState =
 @Component({
   selector: 'blog-home',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, SiteWidgetsComponent],
   template: `
     <section class="container">
       <p class="eyebrow">BLOG</p>
       <h1>Artigos e novidades</h1>
       <p>Área pública do Blog CMS.</p>
-      <div class="posts" aria-live="polite">
+      <div class="blog-columns"><div class="posts" aria-live="polite">
         @if (state().status === 'loading') {
           <p class="panel">Carregando artigos…</p>
         } @else if (state().status === 'error') {
@@ -41,6 +42,8 @@ type PostState =
             <p class="panel">Ainda não existem artigos publicados.</p>
           }
         }
+      </div>
+      <blog-site-widgets />
       </div>
     </section>
   `,

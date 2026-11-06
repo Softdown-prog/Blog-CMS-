@@ -30,7 +30,7 @@ interface PostDetailRow extends PostRow {
 const PUBLIC_POSTS_SQL = `
 SELECT id::text AS id, slug, title, excerpt, published_at
 FROM cms_posts
-WHERE status = 'published' AND published_at IS NOT NULL AND published_at <= NOW()
+WHERE content_kind = 'post' AND status = 'published' AND published_at IS NOT NULL AND published_at <= NOW()
 ORDER BY published_at DESC, id DESC
 LIMIT 30
 `;
@@ -38,7 +38,7 @@ LIMIT 30
 const PUBLIC_POST_SQL = `
 SELECT id::text AS id, slug, title, excerpt, published_at, body
 FROM cms_posts
-WHERE slug = $1 AND status = 'published'
+WHERE slug = $1 AND content_kind = 'post' AND status = 'published'
   AND published_at IS NOT NULL AND published_at <= NOW()
 LIMIT 1
 `;

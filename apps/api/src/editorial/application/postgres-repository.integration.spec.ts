@@ -44,6 +44,7 @@ test('integração editorial com PostgreSQL 18 descartável', async (t) => {
     for (const pathname of [
       '../../database/migrations/001_initial.sql',
       '../../database/proposals/002_editorial_storage_draft.sql',
+      '../../database/proposals/004_pages_widgets_draft.sql',
     ]) {
       const migration = await readFile(resolve(process.cwd(), pathname), 'utf8');
       await pool.query(migration);

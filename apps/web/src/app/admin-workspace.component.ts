@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AdminPreviewComponent } from './admin-preview.component';
 
 interface SessionInfo {
@@ -11,7 +11,7 @@ interface SessionInfo {
 @Component({
   selector: 'blog-admin-workspace',
   standalone: true,
-  imports: [AdminPreviewComponent],
+  imports: [AdminPreviewComponent, RouterLink],
   template: `
     <section class="container admin-session-bar">
       <div>
@@ -22,6 +22,7 @@ interface SessionInfo {
           <p>Verificando sessão…</p>
         }
       </div>
+      @if (role() === 'admin') { <a routerLink="/admin/site">Páginas e widgets</a> }
       <button type="button" [disabled]="ending()" (click)="logout()">
         {{ ending() ? 'Saindo…' : 'Sair da conta' }}
       </button>

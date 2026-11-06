@@ -41,6 +41,7 @@ export type AdminAction =
   | 'schedule-post'
   | 'cancel-schedule'
   | 'manage-users'
+  | 'manage-widgets'
   | 'rotate-session'
   | 'logout-session'
   | 'revoke-all-sessions';
@@ -62,7 +63,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/;
 const ALL_ACTIONS: readonly AdminAction[] = [
   'list-posts', 'view-revisions', 'create-draft', 'edit-draft',
-  'restore-draft', 'publish-post', 'schedule-post', 'cancel-schedule', 'manage-users',
+  'restore-draft', 'publish-post', 'schedule-post', 'cancel-schedule', 'manage-users', 'manage-widgets',
   'rotate-session', 'logout-session', 'revoke-all-sessions',
 ];
 const AUTHOR_ACTIONS: readonly AdminAction[] = [
