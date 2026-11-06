@@ -1,4 +1,6 @@
 import { DatePipe } from '@angular/common';
+import { textTypographyClasses } from '../../../api/src/editorial/typography';
+import type { EditorialBlock } from '../../../api/src/editorial/document';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -6,12 +8,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { SiteWidgetsComponent } from './site-widgets.component';
 import { catchError, distinctUntilChanged, map, of, startWith, switchMap, tap } from 'rxjs';
 
-type ArticleBlock =
-  | Readonly<{ type: 'paragraph'; text: string }>
-  | Readonly<{ type: 'heading'; level: 2 | 3; text: string }>
-  | Readonly<{ type: 'quote'; text: string }>
-  | Readonly<{ type: 'list'; items: readonly string[] }>
-  | Readonly<{ type: 'image'; mediaId: string; alt: string }>;
+type ArticleBlock = EditorialBlock;
 
 interface PublicArticle {
   readonly id: string;
@@ -62,17 +59,17 @@ type ArticleState =
             <div class="article-body" data-testid="article-body">
               @for (block of current.post.body.blocks; track $index) {
                 @if (block.type === 'paragraph') {
-                  <p>{{ block.text }}</p>
+                  <p [class]="typographyClasses(block.typography)">{{ block.text }}</p>
                 } @else if (block.type === 'heading') {
                   @if (block.level === 2) {
-                    <h2>{{ block.text }}</h2>
+                    <h2 [class]="typographyClasses(block.typography)">{{ block.text }}</h2>
                   } @else {
-                    <h3>{{ block.text }}</h3>
+                    <h3 [class]="typographyClasses(block.typography)">{{ block.text }}</h3>
                   }
                 } @else if (block.type === 'quote') {
-                  <blockquote>{{ block.text }}</blockquote>
+                  <blockquote [class]="typographyClasses(block.typography)">{{ block.text }}</blockquote>
                 } @else if (block.type === 'list') {
-                  <ul>
+                  <ul [class]="typographyClasses(block.typography)">
                     @for (item of block.items; track $index) {
                       <li>{{ item }}</li>
                     }
@@ -92,6 +89,7 @@ type ArticleState =
   `,
 })
 export class PostDetailComponent {
+  protected readonly typographyClasses = textTypographyClasses;
   private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
   protected readonly isPage = this.route.snapshot.data['kind'] === 'page';

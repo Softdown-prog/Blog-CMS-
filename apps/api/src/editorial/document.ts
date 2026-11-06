@@ -2,11 +2,16 @@
  * Contrato editorial canônico v1. Independente de Angular, Tiptap, Nest e SQL.
  * Somente dados JSON conhecidos; NUNCA enviar campos text para [innerHTML].
  */
+import { parseTextTypography } from './typography';
+import type { TextTypography } from './typography';
+
+export type TextBlockTypography = Readonly<{ typography?: TextTypography }>;
+
 export type EditorialBlock =
-  | Readonly<{ type: 'paragraph'; text: string }>
-  | Readonly<{ type: 'heading'; level: 2 | 3; text: string }>
-  | Readonly<{ type: 'quote'; text: string }>
-  | Readonly<{ type: 'list'; items: readonly string[] }>
+  | (Readonly<{ type: 'paragraph'; text: string }> & TextBlockTypography)
+  | (Readonly<{ type: 'heading'; level: 2 | 3; text: string }> & TextBlockTypography)
+  | (Readonly<{ type: 'quote'; text: string }> & TextBlockTypography)
+  | (Readonly<{ type: 'list'; items: readonly string[] }> & TextBlockTypography)
   | Readonly<{ type: 'image'; mediaId: string; alt: string }>;
 
 export interface EditorialDocumentV1 {
@@ -40,8 +45,9 @@ function object(value: unknown): value is Record<string, unknown> {
     && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
 }
 
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): void {
-  if (Object.keys(value).some(key => !keys.includes(key))
+function exactKeys(value: Record<string, unknown>, keys: readonly string[],
+  optional: readonly string[] = []): void {
+  if (Object.keys(value).some(key => !keys.includes(key) && !optional.includes(key))
     || keys.some(key => !Object.hasOwn(value, key))) fail('invalid-field');
 }
 
@@ -65,25 +71,31 @@ export function parseEditorialDocument(value: unknown): EditorialDocumentV1 {
   for (const raw of value.blocks) {
     if (!object(raw)) fail('invalid-block');
     let result: EditorialBlock;
+    // All text blocks accept a restricted, optional typography object.
+    // Existing v1 articles with no typography keep their exact JSON shape.
+    const typography = raw.type !== 'image' && Object.hasOwn(raw, 'typography')
+      ? parseTextTypography(raw['typography']) : undefined;
+    if (typography === null) fail('invalid-field');
+    const style = typography ? { typography } : {};
     switch (raw.type) {
       case 'paragraph':
-        exactKeys(raw, ['type', 'text']);
-        result = { type: 'paragraph', text: text(raw.text, 5_000) };
+        exactKeys(raw, ['type', 'text'], ['typography']);
+        result = { type: 'paragraph', text: text(raw.text, 5_000), ...style };
         totalText += result.text.length;
         break;
       case 'heading':
-        exactKeys(raw, ['type', 'level', 'text']);
+        exactKeys(raw, ['type', 'level', 'text'], ['typography']);
         if (raw.level !== 2 && raw.level !== 3) fail('invalid-field');
-        result = { type: 'heading', level: raw.level, text: text(raw.text, 180) };
+        result = { type: 'heading', level: raw.level, text: text(raw.text, 180), ...style };
         totalText += result.text.length;
         break;
       case 'quote':
-        exactKeys(raw, ['type', 'text']);
-        result = { type: 'quote', text: text(raw.text, 2_000) };
+        exactKeys(raw, ['type', 'text'], ['typography']);
+        result = { type: 'quote', text: text(raw.text, 2_000), ...style };
         totalText += result.text.length;
         break;
       case 'list': {
-        exactKeys(raw, ['type', 'items']);
+        exactKeys(raw, ['type', 'items'], ['typography']);
         if (!Array.isArray(raw.items) || raw.items.length > 40) fail('invalid-field');
         const items: string[] = [];
         for (const item of raw.items) {
@@ -91,7 +103,7 @@ export function parseEditorialDocument(value: unknown): EditorialDocumentV1 {
           items.push(entry);
           totalText += entry.length;
         }
-        result = { type: 'list', items };
+        result = { type: 'list', items, ...style };
         break;
       }
       case 'image':

@@ -92,3 +92,30 @@ test('alterar ALT do bloco não modifica mídia original e usa validação canô
   assert.throws(() => workbenchDocument([{ ...block, text: 'x'.repeat(181) }]),
     DocumentValidationError);
 });
+
+test('blocos com fontes e estilos mantêm formatação no documento canônico', () => {
+  const typography = {
+    font: 'verdana', size: 'xlarge', align: 'right', bold: true, italic: true,
+  } as const;
+  const source = [
+    { ...createWorkbenchBlock(1, 'paragraph'), text: 'Texto estilizado', typography },
+    { ...createWorkbenchBlock(2, 'list'), text: 'Primeiro\nSegundo', typography },
+  ];
+  const copy = JSON.stringify(source);
+  const saved = workbenchDocument(source);
+  assert.deepEqual(saved.blocks[0], { type: 'paragraph', text: 'Texto estilizado', typography });
+  assert.deepEqual(saved.blocks[1], { type: 'list', items: ['Primeiro', 'Segundo'], typography });
+  assert.equal(JSON.stringify(source), copy);
+});
+
+test('formatação inválida é rejeitada no mesmo limite do backend', () => {
+  const item = createWorkbenchBlock(1, 'paragraph');
+  assert.throws(() => workbenchDocument([{
+    ...item, text: 'Teste',
+    typography: {
+      font: 'https://malicioso.invalid/fonte.css', size: 'normal',
+      align: 'left', bold: false, italic: false,
+    } as unknown as NonNullable<typeof item['typography']>,
+  }]), DocumentValidationError);
+});
+

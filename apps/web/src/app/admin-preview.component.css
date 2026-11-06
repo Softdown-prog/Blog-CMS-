@@ -110,3 +110,16 @@ button.remove-action { background: #fff; color: #8a2630; border: 1px solid #deb6
 .historical-blocks p { white-space: pre-wrap; overflow-wrap: anywhere; margin: .6rem 0; }
 .historical-panel button { min-height: 44px; }
 .historical-panel [role=alert] { color: #a32935; font-weight: 600; }
+
+/* Per-block typography settings; two-column layout on compact Android widths. */
+.typography-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .55rem; padding: .7rem 0; margin: .5rem 0; border-block: 1px solid #d9e3ec; }
+.typography-controls label { display: grid; gap: .3rem; min-width: 0;
+  font-size: .85rem; color: #3e5065; font-weight: 600; }
+.typography-controls select { max-width: 100%; min-width: 0; font: inherit; }
+.typography-controls .typography-toggle { display: flex; align-items: center; gap: .45rem; }
+.typography-controls input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; }
+@media (max-width: 700px) {
+ .typography-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+ .typography-controls label:nth-child(3) { grid-column: 1 / -1; }
+}

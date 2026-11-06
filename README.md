@@ -86,3 +86,10 @@ Veja [Histórico e recuperação de versões](docs/EDITORIAL_HISTORY_HTTP.md).
 O painel Angular confirma saída com edições locais não salvas, inclusive ao
 encerrar a sessão. Essa proteção não é autossalvamento e não substitui o
 botão **Salvar rascunho**. Consulte [proteção de navegação](docs/EDITOR_NAVIGATION_SAFETY.md).
+
+## Tipografia dos artigos
+
+O editor Angular permite configurar fonte, tamanho, alinhamento, negrito e
+itálico **por bloco**, com pré-visualização e persistência no artigo publicado.
+O formato é validado pelo backend sem aceitar HTML/CSS arbitrário. Consulte
+[tipografia no editor](docs/EDITOR_TYPOGRAPHY.md).

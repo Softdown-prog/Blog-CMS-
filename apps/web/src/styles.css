@@ -87,3 +87,49 @@ footer { padding: 2rem 1rem; text-align: center; color: #61728a; }
  .widget-button-tooltip { position: static; background: transparent; color: #3d5268;
    padding: .3rem .1rem; opacity: 1; visibility: visible; font-size: .82rem; }
 }
+
+
+/* Controlled editorial typography shared by Angular preview and public articles.
+   Only enumerated classes are generated. No remote fonts and no dynamic CSS. */
+.article-body p, .article-body ul, .article-body blockquote { --cms-type-base: 1.05rem; }
+.article-body h2 { --cms-type-base: 1.6rem; }
+.article-body h3 { --cms-type-base: 1.3rem; }
+.post-preview p, .post-preview ul, .post-preview blockquote { --cms-type-base: 1rem; }
+.post-preview h4 { --cms-type-base: 1.28rem; }
+.post-preview h5 { --cms-type-base: 1.12rem; }
+.article-body .cms-type-system, .post-preview .cms-type-system {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.article-body .cms-type-arial, .post-preview .cms-type-arial {
+  font-family: Arial, Helvetica, sans-serif;
+}
+.article-body .cms-type-georgia, .post-preview .cms-type-georgia {
+  font-family: Georgia, "Times New Roman", serif;
+}
+.article-body .cms-type-verdana, .post-preview .cms-type-verdana {
+  font-family: Verdana, Geneva, sans-serif;
+}
+.article-body .cms-type-mono, .post-preview .cms-type-mono {
+  font-family: "Courier New", Courier, monospace;
+}
+.article-body .cms-type-size-small, .post-preview .cms-type-size-small {
+  font-size: calc(var(--cms-type-base, 1rem) * .9);
+}
+.article-body .cms-type-size-normal, .post-preview .cms-type-size-normal {
+  font-size: var(--cms-type-base, 1rem);
+}
+.article-body .cms-type-size-large, .post-preview .cms-type-size-large {
+  font-size: calc(var(--cms-type-base, 1rem) * 1.18);
+}
+.article-body .cms-type-size-xlarge, .post-preview .cms-type-size-xlarge {
+  font-size: calc(var(--cms-type-base, 1rem) * 1.38);
+}
+.article-body .cms-type-align-left, .post-preview .cms-type-align-left { text-align: left; }
+.article-body .cms-type-align-center, .post-preview .cms-type-align-center { text-align: center; }
+.article-body .cms-type-align-right, .post-preview .cms-type-align-right { text-align: right; }
+.article-body .cms-type-bold, .post-preview .cms-type-bold { font-weight: 700; }
+.article-body .cms-type-italic, .post-preview .cms-type-italic { font-style: italic; }
+
+/* Explicitly selected regular/roman styles should override heading defaults. */
+.article-body .cms-type-regular, .post-preview .cms-type-regular { font-weight: 400; }
+.article-body .cms-type-roman, .post-preview .cms-type-roman { font-style: normal; }

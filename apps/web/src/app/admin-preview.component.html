@@ -270,6 +270,58 @@
                 <option value="3">Título H3</option>
               </select>
             }
+            @if (block.kind !== 'image') {
+              <div class="typography-controls" role="group"
+                [attr.aria-label]="'Tipografia do bloco ' + ($index + 1)">
+                <label [for]="'type-font-' + block.id">Fonte
+                  <select [id]="'type-font-' + block.id"
+                    [attr.data-testid]="'type-font-' + block.id"
+                    #typeFont [value]="block.typography?.font ?? 'system'"
+                    (change)="changeTypography(block.id, 'font', typeFont.value)">
+                    <option value="system">Padrão do sistema</option>
+                    <option value="arial">Arial</option>
+                    <option value="georgia">Georgia</option>
+                    <option value="verdana">Verdana</option>
+                    <option value="mono">Monoespaçada</option>
+                  </select>
+                </label>
+                <label [for]="'type-size-' + block.id">Tamanho
+                  <select [id]="'type-size-' + block.id"
+                    [attr.data-testid]="'type-size-' + block.id"
+                    #typeSize [value]="block.typography?.size ?? 'normal'"
+                    (change)="changeTypography(block.id, 'size', typeSize.value)">
+                    <option value="small">Pequeno</option>
+                    <option value="normal">Normal</option>
+                    <option value="large">Grande</option>
+                    <option value="xlarge">Muito grande</option>
+                  </select>
+                </label>
+                <label [for]="'type-align-' + block.id">Alinhamento
+                  <select [id]="'type-align-' + block.id"
+                    [attr.data-testid]="'type-align-' + block.id"
+                    #typeAlign [value]="block.typography?.align ?? 'left'"
+                    (change)="changeTypography(block.id, 'align', typeAlign.value)">
+                    <option value="left">Esquerda</option>
+                    <option value="center">Centro</option>
+                    <option value="right">Direita</option>
+                  </select>
+                </label>
+                <label class="typography-toggle" [for]="'type-bold-' + block.id">
+                  <input type="checkbox" [id]="'type-bold-' + block.id"
+                    [attr.data-testid]="'type-bold-' + block.id"
+                    #typeBold [checked]="block.typography?.bold ?? false"
+                    (change)="changeTypography(block.id, 'bold', typeBold.checked)" />
+                  Negrito
+                </label>
+                <label class="typography-toggle" [for]="'type-italic-' + block.id">
+                  <input type="checkbox" [id]="'type-italic-' + block.id"
+                    [attr.data-testid]="'type-italic-' + block.id"
+                    #typeItalic [checked]="block.typography?.italic ?? false"
+                    (change)="changeTypography(block.id, 'italic', typeItalic.checked)" />
+                  Itálico
+                </label>
+              </div>
+            }
             <label class="sr-only" [for]="'block-text-' + block.id">
               {{ block.kind === 'image' ? 'Descrição alternativa da imagem' : 'Conteúdo do bloco' }} {{ $index + 1 }}
             </label>
@@ -374,13 +426,13 @@
             @for (block of blocks(); track block.id) {
               @switch (block.kind) {
                 @case ('heading') {
-                  @if (block.level === 2) { <h4>{{ block.text }}</h4> }
-                  @else { <h5>{{ block.text }}</h5> }
+                  @if (block.level === 2) { <h4 [class]="typographyClasses(block.typography)">{{ block.text }}</h4> }
+                  @else { <h5 [class]="typographyClasses(block.typography)">{{ block.text }}</h5> }
                 }
-                @case ('paragraph') { <p>{{ block.text }}</p> }
-                @case ('quote') { <blockquote>{{ block.text }}</blockquote> }
+                @case ('paragraph') { <p [class]="typographyClasses(block.typography)">{{ block.text }}</p> }
+                @case ('quote') { <blockquote [class]="typographyClasses(block.typography)">{{ block.text }}</blockquote> }
                 @case ('list') {
-                  <ul>
+                  <ul [class]="typographyClasses(block.typography)">
                     @for (item of listItems(block.text); track $index) { <li>{{ item }}</li> }
                   </ul>
                 }

@@ -1,4 +1,6 @@
 import { Component, HostListener, computed, inject, input, signal } from '@angular/core';
+import { DEFAULT_TEXT_TYPOGRAPHY, parseTextTypography, textTypographyClasses } from '../../../api/src/editorial/typography';
+import type { TextTypography } from '../../../api/src/editorial/typography';
 import { DatePipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -66,6 +68,7 @@ interface RevisionPage {
 })
 
 export class AdminPreviewComponent {
+  protected readonly typographyClasses = textTypographyClasses;
 
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
@@ -187,7 +190,9 @@ export class AdminPreviewComponent {
     this.http.get<PersistedDraft>('/api/admin/editorial/drafts/' + encodeURIComponent(id)).subscribe({
       next: post => {
         const blocks: WorkbenchBlock[] = post.body.blocks.map((block, index): WorkbenchBlock => {
-          const base = { id: index + 1, kind: block.type, level: 2 as const };
+          const base = { id: index + 1, kind: block.type, level: 2 as const,
+            ...(block.type !== 'image' && block.typography ? { typography: block.typography } : {}),
+          };
           if (block.type === 'list') return { ...base, text: block.items.join('\n') };
           if (block.type === 'image') return { ...base, text: block.alt, mediaId: block.mediaId };
           return { ...base, text: block.text, level: block.type === 'heading' ? block.level : 2 };
@@ -484,6 +489,19 @@ export class AdminPreviewComponent {
   protected changeBlock(id: number, value: string): void {
     this.blocks.update(current => current.map(block => block.id === id
       ? { ...block, text: value } : block));
+  }
+
+  protected changeTypography(
+    id: number, field: keyof TextTypography, value: string | boolean,
+  ): void {
+    this.blocks.update(current => current.map(block => {
+      if (block.id !== id || block.kind === 'image') return block;
+      const updated = parseTextTypography({
+        ...DEFAULT_TEXT_TYPOGRAPHY, ...block.typography, [field]: value,
+      });
+      // Only our fixed font/size/align/weight/emphasis choices are accepted.
+      return updated ? { ...block, typography: updated } : block;
+    }));
   }
 
   protected changeHeadingLevel(id: number, value: string): void {

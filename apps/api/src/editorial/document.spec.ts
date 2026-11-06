@@ -52,3 +52,48 @@ test('limites de tamanho impedem conteúdo excessivo', () => {
   expectRejected({ schemaVersion: 1, blocks: Array.from({ length: 21 }, () => ({ type: 'paragraph', text: 'x'.repeat(5000) })) });
 });
 
+
+test('tipografia é opcional nos artigos antigos e validada nos novos blocos', () => {
+  const typography = {
+    font: 'georgia', size: 'large', align: 'center', bold: true, italic: false,
+  } as const;
+  const legacy = parseEditorialDocument({
+    schemaVersion: 1, blocks: [{ type: 'paragraph', text: 'Texto legado' }],
+  });
+  assert.deepEqual(legacy.blocks, [{ type: 'paragraph', text: 'Texto legado' }]);
+  const article = parseEditorialDocument({
+    schemaVersion: 1, blocks: [
+      { type: 'paragraph', text: 'Uma introdução', typography },
+      { type: 'heading', level: 2, text: 'Um título', typography },
+      { type: 'quote', text: 'Uma citação', typography },
+      { type: 'list', items: ['Item'], typography },
+    ],
+  });
+  for (const block of article.blocks) {
+    assert.ok(block.type !== 'image');
+    if (block.type !== 'image') assert.deepEqual(block.typography, typography);
+  }
+  assert.equal(hasPublishableContent(article), true);
+});
+
+test('tipografia bloqueia fontes/CSS arbitrários e não permite formatação de imagens', () => {
+  const valid = {
+    font: 'arial', size: 'normal', align: 'right', bold: false, italic: true,
+  };
+  const item = (typography: unknown): unknown => ({
+    schemaVersion: 1, blocks: [{ type: 'paragraph', text: 'Texto', typography }],
+  });
+  expectRejected(item({ ...valid, font: 'url(https://example.org/font.woff2)' }));
+  expectRejected(item({ ...valid, font: '"Arial"; color:red' }));
+  expectRejected(item({ ...valid, size: '99999px' }));
+  expectRejected(item({ ...valid, align: 'justify;display:none' }));
+  expectRejected(item({ ...valid, bold: 'true' }));
+  expectRejected(item({ ...valid, italic: 1 }));
+  expectRejected(item({ ...valid, inject: '<script>' }));
+  expectRejected(item({ ...valid, font: undefined }));
+  expectRejected(item(null));
+  expectRejected({ schemaVersion: 1, blocks: [{
+    type: 'image', mediaId: MEDIA, alt: 'Foto', typography: valid,
+  }] });
+});
+

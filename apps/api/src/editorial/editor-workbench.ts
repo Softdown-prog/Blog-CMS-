@@ -1,4 +1,5 @@
 import { parseEditorialDocument } from './document';
+import type { TextTypography } from './typography';
 import { parseMediaAsset } from './publication-media';
 import type { MediaAssetV1 } from './publication-media';
 import type { EditorialDocumentV1, EditorialBlock } from './document';
@@ -11,6 +12,7 @@ export interface WorkbenchBlock {
   readonly text: string;
   readonly level: 2 | 3;
   readonly mediaId?: string;
+  readonly typography?: TextTypography;
 }
 
 export const WORKBENCH_BLOCK_LIMIT = 200;
@@ -48,10 +50,13 @@ export function workbenchDocument(blocks: readonly WorkbenchBlock[]): EditorialD
       throw new Error('Duplicate or invalid local block ID');
     }
     seen.add(block.id);
+    // Images are deliberately excluded from text typography.
+    const style = block.kind !== 'image' && block.typography
+      ? { typography: block.typography } : {};
     switch (block.kind) {
-      case 'paragraph': return { type: 'paragraph', text: block.text };
-      case 'heading': return { type: 'heading', level: block.level, text: block.text };
-      case 'quote': return { type: 'quote', text: block.text };
+      case 'paragraph': return { type: 'paragraph', text: block.text, ...style };
+      case 'heading': return { type: 'heading', level: block.level, text: block.text, ...style };
+      case 'quote': return { type: 'quote', text: block.text, ...style };
       case 'image': {
         if (typeof block.mediaId !== 'string') throw new Error('Image without media ID');
         return { type: 'image', mediaId: block.mediaId, alt: block.text };
@@ -59,6 +64,7 @@ export function workbenchDocument(blocks: readonly WorkbenchBlock[]): EditorialD
       case 'list': return {
         type: 'list',
         items: block.text.split(/\r?\n/u).filter((line: string) => line.trim().length > 0),
+        ...style,
       };
       default: throw new Error('Unsupported workbench block');
     }
