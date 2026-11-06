@@ -18,18 +18,6 @@ import {
 import type { DraftTaxonomyV1 } from '../../../api/src/editorial/publication-taxonomy';
 import type { PublicationDiagnostic } from '../../../api/src/editorial/publication-tools';
 
-/**
- * Authenticated workbench: draft save/load/publish is explicit and revision-checked.
- * Media catalog, taxonomy and cover remain demonstrative until persisted.
- */
-@Component({
-  selector: 'blog-admin-preview',
-  standalone: true,
-  imports: [RouterLink],
-  templateUrl: './admin-preview.component.html',
-  styleUrl: './admin-preview.component.css',
-})
-
 interface DraftListItem {
   readonly id: string;
   readonly title: string;
@@ -48,6 +36,19 @@ interface PersistedDraft {
   readonly status: 'draft' | 'published';
   readonly body: EditorialDocumentV1;
 }
+
+
+/**
+ * Authenticated workbench: draft save/load/publish is explicit and revision-checked.
+ * Media catalog, taxonomy and cover remain demonstrative until persisted.
+ */
+@Component({
+  selector: 'blog-admin-preview',
+  standalone: true,
+  imports: [RouterLink],
+  templateUrl: './admin-preview.component.html',
+  styleUrl: './admin-preview.component.css',
+})
 
 export class AdminPreviewComponent {
 
