@@ -101,17 +101,18 @@ export class EditorialCommands {
     private readonly ids: EditorialIds,
   ) {}
 
-  async createDraft(actor: EditorialActor, input: DraftFields): Promise<UseCaseResult<EditorialPost>> {
+  async createDraft(actor: EditorialActor, input: DraftFields & { readonly kind?: unknown }): Promise<UseCaseResult<EditorialPost>> {
     if (!knownRole(actor.role) || !validId(actor.id)) return reject('forbidden');
     const parsed = parseFields(input);
     if (!parsed.ok) return parsed;
+    if (input.kind !== undefined && input.kind !== 'post' && input.kind !== 'page') return reject('invalid-input');
     const id = this.ids.newId();
     if (!validId(id)) return reject('invalid-input');
     const post: EditorialPost = {
       id, authorId: actor.id, revision: 0, status: 'draft',
       ...parsed.value, scheduledAt: null, publishedAt: null,
     };
-    const result = await this.repo.createDraft(post);
+    const result = await this.repo.createDraft(post, input.kind === 'page' ? 'page' : 'post');
     return result === 'created' ? accept(post) : reject('duplicate-slug');
   }
 

@@ -4,7 +4,7 @@ import type { EditorialPost } from '../policy';
 export interface EditorialRepository {
   findById(id: string): Promise<EditorialPost | null>;
   /** Post e snapshot da revisão 0 são gravados atomicamente pelo adaptador PG. */
-  createDraft(post: EditorialPost): Promise<'created' | 'duplicate-slug'>;
+  createDraft(post: EditorialPost, kind?: 'post' | 'page'): Promise<'created' | 'duplicate-slug'>;
   /**
    * UPDATE condicional por id + revision; snapshot e alteração precisam
    * participar da mesma transação, inclusive sob concorrência real.
